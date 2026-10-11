@@ -965,7 +965,7 @@ class ASFirmwarePatches(CompiledPayloadMixin):
         square_label = self.redefine_fw_string(-1, {0: 'Square Wave'}, 'squarewave_label')
         square_dep = self.asf.find_var_table_index(4, 'RGT')
 
-        self.redefine_g8_var(square_var, 0x0007, 0, square_dep, square_label, 1,
+        self.redefine_g8_var(square_var, 0x0007, 0, square_dep, square_label, 0,
                              2, 0, 0x00000003, self.asf.str_id_off_on_base, 0)
 
         square_vid = self.asf.resolve_var_id(square_var)
@@ -983,7 +983,7 @@ class ASFirmwarePatches(CompiledPayloadMixin):
         graph_dep = self.asf.find_var_table_index(4, 'RGT')
 
         self.redefine_g8_var(
-            graph_var, 0x0007, 0, graph_dep, self.STR_ID_MONITORING, 1,
+            graph_var, 0x0007, 0, graph_dep, self.STR_ID_MONITORING, 0,
             2, 0, 0x00000003, self.asf.str_id_off_on_base, 0)
 
         graph_vid = self.asf.resolve_var_id(graph_var)
