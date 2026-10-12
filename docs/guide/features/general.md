@@ -55,6 +55,11 @@ Without this patch, the stock 85% target remains unchanged.
 The percentage is a target, not a measurement of humidity at the mask.
 Higher targets increase condensation risk; 100% targets saturation.
 
+## Header Clock
+
+Enable **Clock** in clinical **Configuration** to replace the Home and active
+therapy-screen titles with the device time in 24-hour `HH:MM` format.
+
 ## Motor Runtime Warning
 
 The patch removes the "Motor life exceeded" nag screen that stock firmware can

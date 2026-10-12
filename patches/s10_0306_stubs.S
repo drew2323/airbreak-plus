@@ -68,6 +68,13 @@ NSTUB_VAR(0x0804ED40, font_text_chinese)
 NSTUB_VAR(0x080999B8, font_large_standard)
 NSTUB_VAR(0x0809772C, font_large_cjk)
 
+// Header clock
+NSTUB(0x08064713, gui_root_screen_init)
+NSTUB(0x08064921, gui_root_screen_get)
+NSTUB(0x08064777, gui_root_screen_layout_right_widgets)
+NSTUB(0x0806A23B, gui_disp_string_at_utf8)
+NSTUB(0x08074111, WM_InvalidateRect)
+
 // Config persistence
 NSTUB(0x0809E019, file_get_size)
 

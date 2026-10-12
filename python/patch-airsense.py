@@ -660,6 +660,7 @@ class ASFirmwarePatches(CompiledPayloadMixin):
                 'configuration': 0x621b2,
                 'clinical_capacity_site': 0x6189a,
                 'clinical_capacity': 70,
+                'gui_block_size_site': 0x7b59a,
                 'config_error_size_site': 0xce638,
                 'config_error_size_expected': b'\xcf\xf7\x6a\xf9',
                 'page_create_site': 0x6db5c,
@@ -682,6 +683,7 @@ class ASFirmwarePatches(CompiledPayloadMixin):
                 'configuration': 0x628d2,
                 'clinical_capacity_site': 0x61fba,
                 'clinical_capacity': 70,
+                'gui_block_size_site': 0x7bd12,
                 'config_error_size_site': 0xcee28,
                 'config_error_size_expected': b'\xcf\xf7\x34\xf9',
                 'page_create_site': 0x6e28c,
@@ -701,6 +703,7 @@ class ASFirmwarePatches(CompiledPayloadMixin):
                 'configuration': 0x628d2,
                 'clinical_capacity_site': 0x61fba,
                 'clinical_capacity': 70,
+                'gui_block_size_site': 0x7bd0e,
                 'config_error_size_site': 0xced40,
                 'config_error_size_expected': b'\xcf\xf7\x6a\xf9',
                 'page_create_site': 0x6e28c,
@@ -720,6 +723,7 @@ class ASFirmwarePatches(CompiledPayloadMixin):
                 'configuration': 0x628d2,
                 'clinical_capacity_site': 0x61fba,
                 'clinical_capacity': 70,
+                'gui_block_size_site': 0x7bd0e,
                 'config_error_size_site': 0xcefa0,
                 'config_error_size_expected': b'\xcf\xf7\x6a\xf9',
                 'page_create_site': 0x6e28c,
@@ -739,6 +743,7 @@ class ASFirmwarePatches(CompiledPayloadMixin):
                 'configuration': 0x628d2,
                 'clinical_capacity_site': 0x61fba,
                 'clinical_capacity': 70,
+                'gui_block_size_site': 0x7bd0e,
                 'config_error_size_site': 0xcf218,
                 'config_error_size_expected': b'\xcf\xf7\x46\xf9',
                 'page_create_site': 0x6e28c,
@@ -801,6 +806,11 @@ class ASFirmwarePatches(CompiledPayloadMixin):
         self.asf.write_u16(back_str_addr - self.asf.FLASH_BASE, self.custom_menu_back_str_id)
 
         self._patch_clinical_menu_capacity(sites['clinical_capacity_site'], sites['clinical_capacity'])
+
+        # Preallocate 572 GUI handles instead of 270 in the same 36500-byte pool.
+        # Growing the table later needs room for both the old and new copies.
+        self._replace_bytes_checked(sites['gui_block_size_site'], b'\x80\x20',
+                                    b'\x38\x20', 'custom settings GUI handle allocation')
 
         menu_expected = sites['menu_expected']
 
@@ -1015,6 +1025,17 @@ class ASFirmwarePatches(CompiledPayloadMixin):
         self._custom_detail("ASV backup rate: %s var_id=0x%04X label_str=0x%04X at 0x%08X" %
                             (backup_var, backup_vid, backup_label, backup_addr))
 
+    def custom_patch_settings_header_clock(self):
+        var = self.custom_claim_g8_var('RXF', 'header_clock')
+        label = self.redefine_fw_string(-1, {0: 'Clock'}, 'header_clock_label')
+        dep = self.asf.find_var_table_index(4, 'RGT')
+        self.redefine_g8_var(var, 0x0007, 0, dep, label, 0,
+                             2, 0, 0x00000003, self.asf.str_id_off_on_base, 0)
+        self.custom_menu_add('configuration', var, self.CUSTOM_MENU_MODE_BITS)
+        vid = self.asf.resolve_var_id(var)
+        addr = self._write_payload_u16('header_clock', 'header_clock_var_id', vid)
+        self._custom_detail('Clock: %s var_id=0x%04X at 0x%08X' % (var, vid, addr))
+
     def custom_patch_settings_backlight(self):
         """Expose persistent Backlight controls on a generated LCD page."""
         low_var = 'ATH'
@@ -1100,6 +1121,7 @@ class ASFirmwarePatches(CompiledPayloadMixin):
             ('squarewave', self.custom_patch_settings_squarewave),
             ('backlight_adapt', self.custom_patch_settings_backlight),
             ('target_rh', self.custom_patch_settings_target_rh),
+            ('header_clock', self.custom_patch_settings_header_clock),
         )
         active = self.applied_payloads | self.enabled_custom_settings_features
         return [feature for source, feature in feature_patches if source in active]
@@ -2060,6 +2082,42 @@ class ASFirmwarePatches(CompiledPayloadMixin):
         self.applied_payloads.add('language_fonts')
         return PatchOutcome.ok("Fonts follow the active language", *details)
 
+    def patch_header_clock(self):
+        """Show TIC as HH:MM in the Home and on-therapy headers."""
+        if not self._supports_compiled_payloads():
+            return PatchOutcome.skip("unsupported CDX version %s" % self.asf.cdx_ver)
+        # Title draw, title width, root constructor call, root update vtable slot.
+        sites = {
+            '0302': (0x64176, 0x6418a, 0x6420a, 0xf451c),
+            '0305': (0x6489a, 0x648ae, 0x6492e, 0xf4c30),
+            '0306': (0x6489a, 0x648ae, 0x6492e, 0xf4c34),
+            '0401': (0x6489a, 0x648ae, 0x6492e, 0xf4e94),
+            '0402': (0x6489a, 0x648ae, 0x6492e, 0xf510c),
+        }
+        draw, width, ctor, update = sites[self._payload_version_key()]
+        data, _, elf_path = self._load_versioned_payload('header_clock')
+        replacements = []
+        for site, original, wrapper in (
+                (draw, 'gui_disp_string_at_utf8', 'start'),
+                (width, 'gui_get_string_width', 'header_clock_title_width'),
+                (ctor, 'gui_root_screen_init', 'header_clock_init')):
+            expected = self._encode_thumb_bl(site, self._elf_symbol_addr(elf_path, original) & ~1)
+            target = self._elf_symbol_addr(elf_path, wrapper)
+            replacements.append((site, expected, self._encode_thumb_bl(site, target), wrapper))
+        original = self._elf_symbol_addr(elf_path, 'gui_root_screen_layout_right_widgets') | 1
+        target = self._elf_symbol_addr(elf_path, 'header_clock_update') | 1
+        replacements.append((update, struct.pack('<I', original),
+                             struct.pack('<I', target), 'header_clock_update'))
+        for site, expected, _, name in replacements:
+            if self.asf.read_bytes(site, len(expected)) != expected:
+                raise ValueError('patch_header_clock: unexpected %s bytes at 0x%X' % (name, site))
+
+        flash, _ = self._inject_payload('header_clock', data)
+        for site, expected, replacement, name in replacements:
+            self._replace_bytes_checked(site, expected, replacement, 'patch_header_clock: ' + name)
+        self.applied_payloads.add('header_clock')
+        return PatchOutcome.ok(None, self._payload_detail('header_clock', len(data), flash))
+
     def patch_backlight_adapt(self):
         """improved backlight response to ambient light"""
         ver = self._payload_version_key()
@@ -2334,6 +2392,8 @@ PATCH_PHASES = (
                   True, 'patch_defaults'),
         PatchSpec('patch-fw-backlight', 'Improve backlight adaptation to ambient light.',
                   True, 'patch_backlight_adapt'),
+        PatchSpec('patch-header-clock', 'Add a clock to the Home and therapy-screen headers.',
+                  True, 'patch_header_clock'),
         PatchSpec('patch-target-rh',
                   'Set target RH (default: 85%, y: 85%, n: disabled); custom settings adds a 70-100% menu control.',
                   85.0, 'patch_target_rh', value_type=target_rh_value),
