@@ -1164,7 +1164,7 @@ g5	DMS				0x0435	0x0456	0x0468	0x046E	0x0480	2 opts mask=0x00000003
 g5	SOS	OobxOnStartup			0x0436	0x0457	0x0469	0x046F	0x0481	2 opts mask=0x00000003
 g5	ABU				0x0437	0x0458	0x046A	0x0470	0x0482	2 opts mask=0x00000003; set by upgrade preparation; suppresses the initial alarm-volume preview on the next alarm-board connection initialization, then clears
 g5	SVI				0x0438	0x0459	0x046B	0x0471	0x0483	2 opts mask=0x00000003; Sleep View mask-help origin latch; HELP sets 1 to select return navigation; cleared after leaving the mask-fit UI outside therapy
-g5	SVP					0x045A	0x046C	0x0472	0x0484	6 opts mask=0x0000003f
+g5	SVP					0x045A	0x046C	0x0472	0x0484	6 opts mask=0x0000003f; selects the therapy-day window for long-term report aggregates; options: 0=1 day, 1=7 days, 2=30 days, 3=90 days, 4=180 days, 5=365 days
 g5	SMN				0x0439	0x045B	0x046D	0x0473	0x0485	2 opts mask=0x00000003; hides the previous mask-seal result after TRY MASK FIT, showing the next-night update message; cleared on entering Therapy
 g5	SVN				0x043A	0x045C	0x046E	0x0474	0x0486	2 opts mask=0x00000003; mask-seal result viewed latch; suppresses its warning marker; cleared on entering Therapy
 g5	SST	SmartStart	S.SmartStart	SmartStart	0x043B	0x045D	0x046F	0x0475	0x0487	2 opts mask=0x00000003; options: Off, On
