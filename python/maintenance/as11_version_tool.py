@@ -151,6 +151,7 @@ class PortCandidates:
     asv: AsvCandidates
     ota_compatibility: OtaCompatibilityCandidates
     ble_oxi_fallback: dict[str, AddressResult] | None
+    scroll_animation: AddressResult | None
 
 
 @dataclass(frozen=True)
@@ -1038,6 +1039,26 @@ def resolve_screen_keep_awake_candidates(
     return ScreenKeepAwakeCandidates(sites)
 
 
+def resolve_scroll_animation_candidate(
+        data: bytes, stubs: dict[str, AddressResult], reference: dict) -> AddressResult:
+    """Find the clamped step store in the transferred scroller constructor."""
+    ctor = stubs["GuiScroller_ctor"]
+    matches = []
+    if ctor.address is not None:
+        start = ctor.address - FLASH_BASE
+        # The older layout stores the step before initializing the position;
+        # the newer layout initializes the target before storing the step.
+        patterns = (bytes.fromhex("d8bf0a23ab6305f13c03"),
+                    bytes.fromhex("d8bf0a2329640121ab63"))
+        matches = [FLASH_BASE + off + 4 for off in range(start, start + 0x100, 2)
+                   if any(data[off:off + len(pattern)] == pattern for pattern in patterns)]
+    if len(matches) == 1:
+        return AddressResult(reference["step_init"], matches[0], ctor.quality,
+            "unique minimum-10 clamp and step store in GuiScroller_ctor")
+    return AddressResult(reference["step_init"], None, "missing",
+        "found %d clamped step stores in transferred constructor" % len(matches), tuple(matches))
+
+
 def resolve_ble_oxi_fallback_candidates(
         data: bytes, matcher: AddressMatcher, stubs: dict[str, AddressResult],
         reference: dict) -> dict[str, AddressResult]:
@@ -1711,10 +1732,14 @@ def resolve_port_candidates(
         resolve_ble_oxi_fallback_candidates(target_fw.data, matcher, stubs, reference["ble_oxi_fallback"])
         if "ble_oxi_fallback" in reference else None
     )
+    scroll_animation = (
+        resolve_scroll_animation_candidate(target_fw.data, stubs, reference["scroll_animation"])
+        if "scroll_animation" in reference else None
+    )
     return PortCandidates(
         stubs, cloud_firmware_change, cellular_download, rpc_dispatcher, mop,
         timezone_write, header_clock, screen_keep_awake, custom_settings, therapy_screen_style, asv,
-        ota_compatibility, ble_oxi_fallback
+        ota_compatibility, ble_oxi_fallback, scroll_animation
     )
 
 
@@ -2052,6 +2077,15 @@ def self_check_candidates(
         checks.append(compare_candidate("ble_oxi_fallback.%s" % name, value,
             CandidateValue(result.address, result.quality, result.evidence)))
 
+    scroll_expected = expected_version.get("scroll_animation")
+    if scroll_expected is not None:
+        result = candidates.scroll_animation or AddressResult(0, None, "missing", "reference has no patch data")
+        checks.append(compare_candidate("scroll_animation.step_init", scroll_expected["step_init"],
+            CandidateValue(result.address, result.quality, result.evidence)))
+        checks.append(compare_candidate("scroll_animation.before", scroll_expected["before"],
+            derived_candidate(image_bytes_at(target_fw.data, result.address, 6), result,
+                              "displaced instructions and native step store")))
+
     custom_expected = expected_version.get("custom_settings")
     if custom_expected is not None:
         enum_table = candidates.custom_settings.rpc_enum_symbols
@@ -2348,6 +2382,8 @@ def prepare(args) -> int:
         ("ble_oxi_fallback", name, result)
         for name, result in (candidates.ble_oxi_fallback or {}).items()
     )
+    if candidates.scroll_animation is not None:
+        address_rows.append(("scroll_animation", "step_init", candidates.scroll_animation))
     address_rows.extend((
         ("custom_settings", "row_constructor", row_ctor_result),
         ("custom_settings", "scheduler_target", scheduler_target_result),
@@ -2517,6 +2553,16 @@ def prepare(args) -> int:
             '    },',
         ]
 
+    scroll_snippet_lines = []
+    if candidates.scroll_animation is not None:
+        site = candidates.scroll_animation.address
+        scroll_snippet_lines = [
+            '    "scroll_animation": {',
+            '        "step_init": %s,' % format_address(site),
+            '        "before": %r,' % (image_bytes_at(target_fw.data, site, 6) or "TODO"),
+            '    },',
+        ]
+
     snippets = [
         "# Candidate entry for AS11_PATCH_VERSIONS.",
         "# Verify against the target firmware before copying.",
@@ -2524,6 +2570,7 @@ def prepare(args) -> int:
         "%r: {" % target_id.appx_key,
         *cellular_snippet_lines,
         *oxi_snippet_lines,
+        *scroll_snippet_lines,
         *cloud_snippet_lines,
         "    \"rpc_dispatcher\": {",
         "        \"init_entry\": %s," % format_address(

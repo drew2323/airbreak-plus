@@ -17,6 +17,7 @@
 # --patch-vid-spoof y
 # --patch-header-clock y
 # --patch-screen-keep-awake y
+# --patch-scroll-animation n
 # --patch-asv-backup-rate y
 # --patch-custom-settings y
 # --patch-motor-nagscreen y

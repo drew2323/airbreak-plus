@@ -38,6 +38,10 @@ AS11_FGBL_PATCH_VERSIONS = {
 # An explicit None means that the patch does not apply to that APPX.
 AS11_PATCH_VERSIONS = {
     "8_0_1": {
+        "scroll_animation": {
+            "step_init": 0x08066488,
+            "before": "ab6305f13c03",
+        },
         "cloud_firmware_change": {
             "suppress_download": {
                 "address": 0x080BAA26,
@@ -82,6 +86,10 @@ AS11_PATCH_VERSIONS = {
         },
     },
     "8_3_0": {
+        "scroll_animation": {
+            "step_init": 0x08066D14,
+            "before": "ab6305f13c03",
+        },
         "cloud_firmware_change": {
             "suppress_download": {
                 "address": 0x080BBD42,
@@ -150,6 +158,10 @@ AS11_PATCH_VERSIONS = {
         },
     },
     "8_4_0": {
+        "scroll_animation": {
+            "step_init": 0x08067AA8,
+            "before": "29640121ab63",
+        },
         "cloud_firmware_change": {
             "suppress_download": {
                 "address": 0x080BE24A,
@@ -232,6 +244,10 @@ AS11_PATCH_VERSIONS = {
         },
     },
     "8_5_0": {
+        "scroll_animation": {
+            "step_init": 0x08067C84,
+            "before": "29640121ab63",
+        },
         "cloud_firmware_change": {
             "suppress_download": {
                 "address": 0x080BEA86,
@@ -319,6 +335,10 @@ AS11_PATCH_VERSIONS = {
         },
     },
     "8_6_0": {
+        "scroll_animation": {
+            "step_init": 0x080681E4,
+            "before": "29640121ab63",
+        },
         "ble_oxi_fallback": {
             # OXI main interface and its self+8 connect/disconnect interface.
             "ble_oxi_gatt_client_on_stack_event": 0x081AEF18,
@@ -471,6 +491,10 @@ AS11_PATCH_VERSIONS = {
                 "before": "84f86800",
                 "after": "c4f86800",
             },
+        },
+        "scroll_animation": {
+            "step_init": 0x08068808,
+            "before": "29640121ab63",
         },
         "header_clock": {
             "draw_call": 0x080645C6,

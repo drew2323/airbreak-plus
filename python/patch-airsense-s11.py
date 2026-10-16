@@ -330,6 +330,7 @@ AS11_AIRBREAK_INFO_PAYLOAD = "as11_airbreak_info"
 
 AS11_CELLULAR_DOWNLOAD_PAYLOAD = "as11_cellular_download"
 AS11_SCREEN_KEEP_AWAKE_PAYLOAD = "as11_screen_keep_awake"
+AS11_SCROLL_ANIMATION_PAYLOAD = "as11_scroll_animation"
 AS11_BLE_OXI_FALLBACK_PAYLOAD = "as11_ble_oxi_fallback"
 
 
@@ -2831,6 +2832,28 @@ class S11FirmwarePatches(CompiledPayloadMixin):
         )
         return PatchOutcome.ok()
 
+    def scroll_animation(self):
+        """Increase the native scroll step by 50%, retaining its timer interval."""
+        ver = self._payload_version_key()
+        anchors = self._patch_version_data("scroll_animation", ver)
+        data, _, elf_path = self._load_versioned_payload(AS11_SCROLL_ANIMATION_PAYLOAD)
+        entry = self._elf_symbol_addr(elf_path, "start")
+        resume = self._elf_symbol_addr(elf_path, "scroll_animation_resume")
+        displaced = self._elf_symbol_addr(elf_path, "scroll_animation_displaced")
+        site = self.asf.ptr_to_off(anchors["step_init"])
+        before = bytes.fromhex(anchors["before"])
+        if len(before) != self._elf_symbol_size(elf_path, "scroll_animation_displaced"):
+            raise ValueError("scroll_animation: displaced instruction size does not match")
+        if site is None or self.asf.fw[site:site + len(before)] != before:
+            raise ValueError("scroll_animation: step initialization does not match")
+        branch = self.asf.thumb2_bw_bytes(site, entry) + bytes.fromhex("00bf")
+
+        self._inject_payload(AS11_SCROLL_ANIMATION_PAYLOAD, data)
+        self.asf.patch(before, addr=self.asf.ptr_to_off(displaced))
+        self.asf.write_u32(self.asf.ptr_to_off(resume), (anchors["step_init"] + len(before)) | 1)
+        self.asf.patch(branch, addr=site)
+        return PatchOutcome.ok("1.5x scroll step; native timer interval")
+
     def screen_keep_awake(self):
         """Toggle LCD inactivity suppression with a three-finger hold."""
         ver = self._payload_version_key()
@@ -3072,6 +3095,12 @@ PATCH_LIST = [
         "desc": "Toggle LCD inactivity suppression with a three-finger hold.",
         "default": True,
         "function": "screen_keep_awake",
+    },
+    {
+        "arg": "patch-scroll-animation",
+        "desc": "Shorten menu scrolling with a 1.5x step at the native timer interval.",
+        "default": False,
+        "function": "scroll_animation",
     },
     {
         "arg": "patch-startup-logo",

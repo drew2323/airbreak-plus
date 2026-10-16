@@ -131,6 +131,11 @@ turning off the display. Repeat the gesture to restore normal behavior. The
 display pulses when keep-awake is enabled and fades out when it is disabled.
 The setting lasts until the device restarts. Requires firmware 8.4 or later.
 
+## Faster Menu Scrolling (Optional)
+
+`--patch-scroll-animation y` shortens menu scrolling by increasing the animation
+step by 50%.
+
 ## EDF Recording
 
 Stock Air11 variants and therapy modes record different subsets of the
