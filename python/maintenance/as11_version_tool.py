@@ -77,6 +77,7 @@ class MopCandidates:
 class HeaderClockCandidates:
     sites: dict[str, AddressResult]
     text_ids: dict[str, int | None]
+    page_ids: tuple[int, int, int] | None
 
 
 @dataclass
@@ -847,6 +848,27 @@ def find_exact_gui_text_id(fw: AS11Firmware, value: str) -> int | None:
     return matches[0] if len(matches) == 1 else None
 
 
+def decode_header_clock_pages(data: bytes, sites: dict[str, AddressResult]) -> tuple[int, int, int] | None:
+    """Derive page IDs from menu-array stores and the native lookup's ADD."""
+    names = ("home_page_store", "single_pressure_page_store", "pressure_bar_page_store")
+    if any(sites[name].address is None for name in (*names, "page_array_base")):
+        return None
+    off = sites["page_array_base"].address - FLASH_BASE
+    if off < 0 or off + 4 > len(data):
+        return None
+    first, second = struct.unpack_from("<HH", data, off)
+    if first & 0xFE00 == 0x1C00:  # ADDS Rd, Rn, #imm3
+        base = (first >> 6) & 7
+    elif first & 0xFFF0 == 0xF100 and second & 0xF000 == 0:
+        base = second & 0xFF  # ADD.W Rd, Rn, #imm8, without rotation
+    else:
+        return None
+    slots = [decode_str_row_index(data, sites[name].address) for name in names]
+    if base % 4 or any(slot is None or slot * 4 < base for slot in slots):
+        return None
+    return tuple(slot - base // 4 for slot in slots)
+
+
 def resolve_header_clock_candidates(
         fw: AS11Firmware,
         matcher: AddressMatcher,
@@ -859,6 +881,8 @@ def resolve_header_clock_candidates(
         for name in (
             "draw_call", "menu_draw_call", "root_ctor_call",
             "timer_callback_slot",
+            "home_page_store", "single_pressure_page_store",
+            "pressure_bar_page_store", "page_array_base",
         )
         if name in reference
     }
@@ -966,7 +990,7 @@ def resolve_header_clock_candidates(
         "empty_text_id": find_exact_gui_text_id(fw, ""),
         "menu_text_id": find_exact_gui_text_id(fw, "Reminders"),
     }
-    return HeaderClockCandidates(sites, text_ids)
+    return HeaderClockCandidates(sites, text_ids, decode_header_clock_pages(data, sites))
 
 
 def resolve_screen_keep_awake_candidates(
@@ -1946,7 +1970,8 @@ def self_check_candidates(
     if header_clock_expected is not None:
         for name in (
                 "draw_call", "menu_draw_call", "root_ctor_call",
-                "timer_callback_slot"):
+                "timer_callback_slot", "home_page_store", "single_pressure_page_store",
+                "pressure_bar_page_store", "page_array_base"):
             if name not in header_clock_expected:
                 continue
             expected = header_clock_expected[name]
@@ -1956,6 +1981,14 @@ def self_check_candidates(
                 expected,
                 CandidateValue(result.address, result.quality, result.evidence),
             ))
+        page_sites = [candidates.header_clock.sites[name] for name in (
+            "home_page_store", "single_pressure_page_store", "pressure_bar_page_store", "page_array_base")]
+        checks.append(compare_candidate(
+            "header_clock.page_ids", header_clock_expected["page_ids"],
+            CandidateValue(candidates.header_clock.page_ids,
+                           "strong" if all(site.quality == "strong" for site in page_sites) else "weak",
+                           "native menu-array stores relative to the lookup base"),
+        ))
         for name in ("home_text_id", "empty_text_id", "menu_text_id"):
             if name not in header_clock_expected:
                 continue
@@ -2516,6 +2549,9 @@ def prepare(args) -> int:
         "        \"timer_callback_slot\": %s," % format_address(
             header_clock_sites["timer_callback_slot"].address
         ),
+        *["        \"%s\": %s," % (name, format_address(header_clock_sites[name].address))
+          for name in ("home_page_store", "single_pressure_page_store", "pressure_bar_page_store", "page_array_base")],
+        "        \"page_ids\": %r," % (candidates.header_clock.page_ids,),
         "        \"home_text_id\": %s," % format_text_id(
             candidates.header_clock.text_ids["home_text_id"]
         ),

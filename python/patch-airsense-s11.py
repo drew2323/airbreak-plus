@@ -2771,6 +2771,7 @@ class S11FirmwarePatches(CompiledPayloadMixin):
             elf_path, "header_clock_text_ids"
         )
         setting_slot = self._elf_symbol_addr(elf_path, "header_clock_var_id")
+        page_ids = self._elf_symbol_addr(elf_path, "header_clock_page_ids")
         stock_draw = self._elf_symbol_addr(
             elf_path, "GuiPaint_DrawLocalizedTextById"
         )
@@ -2801,6 +2802,8 @@ class S11FirmwarePatches(CompiledPayloadMixin):
 
         flash, _off = self._inject_payload(AS11_HEADER_CLOCK_PAYLOAD, data)
         text_ids_off = text_ids - self.asf.FLASH_BASE
+        for index, page in enumerate(anchors["page_ids"]):
+            self.asf.write_u16(page_ids - self.asf.FLASH_BASE + 2 * index, page)
         self.asf.write_u16(text_ids_off, anchors["home_text_id"])
         self.asf.write_u16(text_ids_off + 2, anchors["empty_text_id"])
         if menu_draw_call is not None:

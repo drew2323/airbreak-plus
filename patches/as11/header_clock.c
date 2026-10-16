@@ -3,10 +3,6 @@
 #include "stubs.h"
 #include "vars.h"
 
-#define GUI_PAGE_DASHBOARD                0u
-#define GUI_PAGE_THERAPY_SINGLE_PRESSURE  2u
-#define GUI_PAGE_THERAPY_PRESSURE_BAR     3u
-
 #define STATUS_STATE_BLINKING 2u
 #define MINUTE_MILLISECONDS 60000u
 
@@ -31,6 +27,12 @@ volatile const header_clock_text_ids_t header_clock_text_ids
         0xFFFFu,
         0xFFFFu,
         0xFFFFu,
+    };
+
+/* Dashboard, SinglePressure, PressureBar; native page IDs vary by release. */
+volatile const unsigned short header_clock_page_ids[3]
+    __attribute__((used, section(".rodata.params.pages"))) = {
+        0xFFFFu, 0xFFFFu, 0xFFFFu,
     };
 
 /* Replaced with the reclaimed setting ID when custom settings are enabled. */
@@ -66,10 +68,9 @@ static int clock_replaces_label(unsigned int text_id)
 {
     unsigned int page = (unsigned int)DataItem_read_value_by_id(VAR_ID_ZMD);
 
-    if (page == GUI_PAGE_DASHBOARD)
+    if (page == header_clock_page_ids[0])
         return text_id == header_clock_text_ids.home;
-    if (page == GUI_PAGE_THERAPY_SINGLE_PRESSURE ||
-            page == GUI_PAGE_THERAPY_PRESSURE_BAR)
+    if (page == header_clock_page_ids[1] || page == header_clock_page_ids[2])
         return text_id == header_clock_text_ids.empty;
     return 0;
 }
