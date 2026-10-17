@@ -27,26 +27,26 @@ AIS	AI	AI_SESSION	0x004D	0x004D	0x0052
 AKM			0x028E	0x028F	0x02C2	
 AL2					0x0174	Lumis SX584-020x exclusive
 ALA		ALARM_LOG_APERIODIC			0x030E	Lumis SX584-020x exclusive; Aperiodic alarm log: ANE events, linked to ALT
-ALB		ACTIVE_ALARM	0x01FD	0x01FD	0x021B	
+ALB		ACTIVE_ALARM	0x01FD	0x01FD	0x021B	Active alarm condition bitmask; bits 12=high leak, 13=non-vented mask, 14=low MV, 15=apnea, 16=low SpO2; local audible output uses TYS
 ALL			0x016B	0x016B	0x0180	Overall CPU usage from the RTOS idle-time statistics; raw / 10 = %
 ALM					0x02C3	Lumis SX584-020x exclusive
-ALR	S.LeakAlert	AUDIO_ALARM	0x0222	0x0222	0x0246	Leak Alert
+ALR	S.LeakAlert	AUDIO_ALARM	0x0222	0x0222	0x0246	Leak Alert: Off, On; enables the high-leak detector when AOA=0; reports TYS bit 0
 ALT					0x0172	Lumis SX584-020x exclusive; Notification variable linked to the ALA alarm log
-ALV	Alm.Vol	ALARM_VOLUME	0x021D	0x021D	0x023D	Alarm Vol/Test
+ALV	Alm.Vol	ALARM_VOLUME	0x021D	0x021D	0x023D	Alarm Vol/Test: Low, Med, High; local buzzer uses fixed 50% PWM duty independent of ALV
 AMR					0x0034	Lumis SX584-020x exclusive
 AMT			0x0128	0x0128	0x0139	
 ANE		ALARM_EVENT_TYPE_TEMP			0x02E6	Lumis SX584-020x exclusive; Alarm event type recorded in ALA
 ANS	S.AA.MinPS	ASV_AUTO_MIN_SWING	0x01E6	0x01E6	0x0200	Min PS [cmH2O] (0.0 .. 6.0 step 0.2); ASVAuto Min PS
 ANT			0x015F	0x015F	0x0171	Change notification for ANV apnea-event records; linked by the NPA signal group
 ANV			0x02B1	0x02B2	0x02E8	NPA apnea-event record: seconds of day (u32), duration in deciseconds (u16), event type (u16)
-AOA			0x027C	0x027D	0x02A6	
+AOA			0x027C	0x027D	0x02A6	Alarm output selection: 0=local buzzer and ALR leak control; 1=alarm-board path and HLE leak control; nonzero disables the local buzzer alarm path
 APF			0x0158	0x0158	0x0168	
 APN		APNEA	0x02C0	0x02C1	0x02F8	Live stream: apnea event type and duration
 APO	Apnea.Alm.En	APNEA_ALM_ENABLE			0x0241	Lumis SX584-020x exclusive; Apnea Alarm: Off, On
 APP		APNEA_PRESS	0x013D	0x013D	0x014E	
 APR			0x0159	0x0159	0x0169	
 APT			0x0116	0x0116	0x0127	Apnea-event change trigger; updates ANV from current time, DUR, and AET
-APX	Apnea.Alm.Thres	APNEA_ALM_THRESHOLD	0x0033	0x0033	0x0038	Apnea Alarm [s] (9 .. 60 step 1); Apnea Alarm
+APX	Apnea.Alm.Thres	APNEA_ALM_THRESHOLD	0x0033	0x0033	0x0038	Apnea Alarm [s], step 1; SX567: 9=Off, 10 .. 60 enables the alarm; Lumis: 10 .. 60, enabled by APO; uses BTM/STK timing and reports TYS bit 3
 AQD			0x00F7	0x00F7	0x0108	AHI (0.0 .. 240.0 step 0.1)
 ARD			0x00F8	0x00F8	0x0109	AHI (0.0 .. 240.0 step 0.1)
 ARS			0x015C	0x015C	0x016C	
@@ -212,7 +212,7 @@ HFL			0x010F	0x010F	0x0120	Calibrated flow from a separate internal flow channel
 HHM	HumTemp.50	HUM_PLATE_TEMP_MED	0x0065	0x0065	0x006A	Humidifier Plate Temp Median
 HID			0x0010	0x0010	0x0011	Humidifier-controller STM8 firmware identifier, 12-character string
 HIS	HI	HI_SESSION	0x004F	0x004F	0x0054	Hypopnea Index
-HLE	HiLeak.Alm.En	HI_LEAK_ALM_EN	0x021F	0x021F	0x023F	High Leak; High Leak Alarm
+HLE	HiLeak.Alm.En	HI_LEAK_ALM_EN	0x021F	0x021F	0x023F	High Leak Alarm: Off, On; enables the high-leak detector when AOA=1; reports TYS bit 0
 HMA		MAX_HEART_RATE			0x00C3	Lumis SX584-020x exclusive; Maximum Heart Rate [bpm]; NPD signal
 HME	S.ExternalHum	HUMID_EXTERNAL	0x022B	0x022B	0x024F	Ext. Humidifier
 HMI		MIN_HEART_RATE			0x00C2	Lumis SX584-020x exclusive; Minimum Heart Rate [bpm]; NPD signal
@@ -312,7 +312,7 @@ LKM	Leak.50	LEAK_MED	0x008E	0x008E	0x009A	Leak Median
 LKP		HI_RES_LEAK	0x008F	0x008F	0x009B	Leak (Hi-Res)
 LLH			0x0101	0x0101	0x0112	LCD backlight high level (0 .. 100)
 LLL			0x00FF	0x00FF	0x0110	LCD backlight low level (0 .. 100)
-LMA	LowMV.Alm.Thres	LOW_MIN_VENT_ALM_THRESHOLD	0x0032	0x0032	0x0037	Low MV [L/min] (0 .. 10 step 1); Low MV Alarm
+LMA	LowMV.Alm.Thres	LOW_MIN_VENT_ALM_THRESHOLD	0x0032	0x0032	0x0037	Low MV Alarm [L/min], step 1; SX567: 0=Off, 1 .. 10 enables the alarm and disables SmartStart; Lumis: 1 .. 10, enabled by LMO; compares MV5 against the threshold and reports TYS bit 2
 LMO	LowMV.Alm.En	LOW_MIN_VENT_ALM_ENABLE			0x0240	Lumis SX584-020x exclusive; Low Minute Ventilation Alarm: Off, On
 LMX	Leak.Max	LEAK_MAX	0x0090	0x0090	0x009C	Leak Max
 LNC		LANGUAGE_CONFIG	0x0204	0x0204	0x0222	Language Config Bitmask
@@ -368,7 +368,7 @@ MXS	S.AV.MaxPS	MAX_SWING	0x01E2	0x01E2	0x01FC	Max PS [cmH2O] (5.0 .. 20.0 step 0
 NBF			0x0124	0x0124	0x0135	
 NGL			0x02E1	0x02E2	0x031A	Backlight settings storage group
 NGT			0x016D	0x016D	0x0182	NGL backlight persistence-group tracker
-NMF	NVMask.Alm.En	NV_MASK_ALM_EN	0x021E	0x021E	0x023E	Non-Vent Mask
+NMF	NVMask.Alm.En	NV_MASK_ALM_EN	0x021E	0x021E	0x023E	Non-Vent Mask Alarm: Off, On; detector uses MKF and SFK, reports TYS bit 1; detection does not require AOA=1
 NOC		NUM_OCCURENCES	0x00AD	0x00AD	0x00BB	Occurrence Count
 NOS			0x00CA	0x00CA	0x00DB	Filtered analog snore-path signal before SNZ zero and SNB background correction; sourced from ADC1_IN14 on PC4
 NPA		NIGHT_PROFILE_APNEA	0x02D5	0x02D6	0x030D	Night profile apnea signal group
@@ -546,7 +546,7 @@ SPM			0x02A7	0x02A8	0x02DD	Current informational GUI message on SX567: 0=none, 1
 SPO	Spo2.Alm.En	SPO2_ALM_ENABLE			0x0242	Lumis SX584-020x exclusive; Low SpO2 Alarm: Off, On
 SPP		SET_PRESSURE	0x003C	0x003C	0x0041	Set Pressure [cmH2O] (0.0 .. 30.0 step 0.2); Set Pressure (runtime)
 SPT	S.VA.PS	PRS_SUPPORT	0x01D7	0x01D7	0x01EF	PS [cmH2O] (0.0 .. 10.0 step 0.2); VAuto PS
-SPX	Spo2.Alm.Thres	SPO2_ALM_THRESHOLD	0x0034	0x0034	0x0039	Low SpO2 [%] (69 .. 95 step 1); Low SpO2 Alarm
+SPX	Spo2.Alm.Thres	SPO2_ALM_THRESHOLD	0x0034	0x0034	0x0039	Low SpO2 Alarm [%], step 1; SX567: 69=Off, 70 .. 95 enables the alarm; Lumis: 70 .. 95, enabled by SPO; uses valid SAO samples and OXC connection state, reports TYS bit 4
 SQT			0x0192	0x0192	0x01A7	
 SRC			0x0291	0x0292	0x02C7	
 SRN		SERIAL_NUM	0x0006	0x0006	0x0006	Serial Number
@@ -603,7 +603,7 @@ TXC		CLIMATE_CONTROL_ERR_LOG	0x02CB	0x02CC	0x0303	EEPROM stream: climate-control
 TXE		TRANSDR_ERR	0x02CD	0x02CE	0x0305	EEPROM stream: transducer errors (SYS)
 TXH		HEATED_TUBE_ERROR_LOG	0x02CC	0x02CD	0x0304	EEPROM stream: heated-tube errors (SYH)
 TXW		TRANSDR_ERR_TWO	0x02CE	0x02CF	0x0306	EEPROM stream: transducer errors 2 (SYT)
-TYS		TRANSIENT_SYSTEM_ERROR	0x0203	0x0203	0x0221	Transient System Error
+TYS		TRANSIENT_SYSTEM_ERROR	0x0203	0x0203	0x0221	Transient system status bitmask; bits 0=high leak, 1=non-vented mask, 2=low MV, 3=apnea, 4=low SpO2, 5=oximeter disconnected, 6=oximeter bad data; bits 0..6 drive the local buzzer when AOA=0, subject to ZKM; stock allowed mask: SX567=0x781, SX584-0204 ST-A=0x7FF
 UAC			0x0118	0x0118	0x0129	Unclassified apnea count; incremented for AET=4
 UAI	UAI	UAI_SESSION	0x0058	0x0058	0x005D	Unknown AI
 UDT			0x01F6	0x01F6	0x0214	Date (0 .. 24836 step 1)
@@ -696,7 +696,7 @@ ZIS			0x01B4	0x01B4	0x01CB
 ZIT			0x01F8	0x01F8	0x0216	Learning… (0 .. 5120 step 1)
 ZJA			0x019B	0x019B	0x01B0	
 ZKA			0x02A6	0x02A7	0x02DC	SPM message acknowledgement; value 1 suppresses the current ZPK condition until that condition clears
-ZKM			0x01BA	0x01BA	0x01D2	
+ZKM			0x01BA	0x01BA	0x01D2	Mute mask for local audible alarms; each set bit suppresses the corresponding TYS bit at the buzzer output
 ZLB			0x0294	0x0295	0x02CA	Checked by the immediate O frame; when nonzero, ZRO is set to 1 before the UART parser is reset
 ZLC			0x027B	0x027C	0x02A5	
 ZLE			0x0295	0x0296	0x02CB	
