@@ -157,7 +157,7 @@ DUF			0x0137	0x0137	0x0148	Days 4hrs+ (0 .. 2048 step 1)
 DUR		APNEA_DUR	0x004E	0x004E	0x0053	Apnea Duration
 DUS		DAYS_USED	0x0139	0x0139	0x014A	Days Used (0 .. 2048 step 1)
 EAI	S.AA.MinEPAP	ASV_AUTO_MIN_EPAP	0x01E5	0x01E5	0x01FF	Min EPAP [cmH2O] (4.0 .. 15.0 step 0.2); ASVAuto Min EPAP
-EAS	S.AA.StartPress	ASV_AUTO_START_EPAP	0x01E8	0x01E8	0x0202	Start EPAP [cmH2O] (4.0 .. 15.0 step 0.2); ASVAuto Start EPAP
+EAS	S.AA.StartPress	ASV_AUTO_START_EPAP	0x01E8	0x01E8	0x0202	ASVAuto ramp start EPAP [cmH2O] (4.0 .. 15.0 step 0.2)
 EAX	S.AA.MaxEPAP	ASV_AUTO_MAX_EPAP	0x01E4	0x01E4	0x01FE	Max EPAP [cmH2O] (4.0 .. 15.0 step 0.2); ASVAuto Max EPAP
 EBE	S.EasyBreathe	EASYBREATHE_ENABLE	0x0217	0x0217	0x0235	Easy-Breathe
 EBW			0x0274	0x0275	0x029E	
@@ -168,13 +168,13 @@ EGT			0x013C	0x013C	0x014D	EGL EPR settings EEPROM group change tracker
 ELI			0x02D2	0x02D3	0x030A	EEPROM stream: ELV records
 ELV			0x01FC	0x01FC	0x021A	
 EMS			0x0208	0x0208	0x0226	
-EPA	S.EPR.ClinEnable	EPR_ACCESS	0x0232	0x0232	0x0256	EPR patient access: 0000=clinical menu only, 0001=patient menu as Pressure Relief
+EPA	S.EPR.ClinEnable	EPR_ACCESS	0x0232	0x0232	0x0256	Clinical menu EPR master switch: 0=Off, 1=On; EPR requires both EPA and EPX enabled; Off also clears EPX; EPX/EPT/EPR are visible only when EPA is On and visible
 EPI	S.i.EPAP	IVAPS_EPAP	0x01E9	0x01E9	0x0203	EPAP [cmH2O] (2.0 .. 25.0 step 0.2); iVAPS EPAP
 EPP	S.BL.EPAP	EPAP	0x01D9	0x01D9	0x01F1	EPAP [cmH2O] (3.0 .. 25.0 step 0.2); Bilevel EPAP
-EPR	S.EPR.Level	EXP_PRES_REL	0x0070	0x0070	0x0075	EPR Level
-EPS	S.BL.StartPress	START_EPAP	0x01DA	0x01DA	0x01F2	Start EPAP [cmH2O] (3.0 .. 25.0 step 0.2); Bilevel Start EPAP
-EPT	S.EPR.EPRType	EPR_TYPE	0x0234	0x0234	0x0258	EPR Type
-EPX	S.EPR.EPREnable	EPR_PATIENT	0x0233	0x0233	0x0257	EPR Patient Enable
+EPR	S.EPR.Level	EXP_PRES_REL	0x0070	0x0070	0x0075	Clinical menu EPR Level: 1/2/3 cmH2O (raw 50/100/150); applied when both EPA and EPX are enabled, with timing selected by EPT
+EPS	S.BL.StartPress	START_EPAP	0x01DA	0x01DA	0x01F2	S/ST/T/PAC ramp start EPAP [cmH2O] (3.0 .. 25.0 step 0.2)
+EPT	S.EPR.EPRType	EPR_TYPE	0x0234	0x0234	0x0258	Clinical menu EPR Type: 0=Ramp Only, 1=Full Time; selects when EPR is applied while both EPA and EPX are enabled
+EPX	S.EPR.EPREnable	EPR_PATIENT	0x0233	0x0233	0x0257	Patient My Options menu Pressure Relief switch: 0=Off, 1=On; requires EPA enabled; switches EPR on/off without changing clinical EPT timing or EPR level
 ERC			0x0281	0x0282	0x02B5	
 ERE			0x0282	0x0283	0x02B6	eep:0 formatting status/control variable
 ERR			0x02D1	0x02D2	0x0309	EEPROM stream: application-error origin records (AER)
@@ -272,7 +272,7 @@ ITN	S.TiMin	TI_MIN	0x01DC	0x01DC	0x01F4	Ti Min [s] (0.1 .. 4.0 step 0.1); Ti Min
 ITT	S.Ti	TI_TOTAL_TIME	0x01DF	0x01DF	0x01F8	Ti [s] (0.3 .. 4.0 step 0.1); Ti
 ITX	S.TiMax	TI_MAX	0x01DD	0x01DD	0x01F5	Ti Max [s] (0.3 .. 4.0 step 0.1); Ti Max
 IVP		MAX_IVAPS_PRESSURE	0x002E	0x002E	0x0031	
-IVS	S.i.StartPress	IVAPS_START_EPAP	0x01EE	0x01EE	0x020A	Start EPAP [cmH2O] (2.0 .. 25.0 step 0.2); iVAPS Start EPAP
+IVS	S.i.StartPress	IVAPS_START_EPAP	0x01EE	0x01EE	0x020A	iVAPS ramp start EPAP [cmH2O] (2.0 .. 25.0 step 0.2)
 KEY			0x0258	0x0259	0x0282	
 KPD			0x00D8	0x00D8	0x00E9	CAL 0006 latched front-panel button event bitmap; 0002=Home, 0004=Start/Stop, 0008=dial press, 0010/0020=additional profile-1 inputs; reset when the service stops
 KPM			0x0285	0x0286	0x02B9	
@@ -555,12 +555,12 @@ SRT			0x0193	0x0193	0x01A8
 SSD			0x0135	0x0135	0x0146	Date (0 .. 24836 step 1)
 SSK			0x02BF	0x02C0	0x02F7	Live stream: internal status values
 SST	S.SmartStart	SMART_START	0x0243	0x0243	0x026D	SmartStart
-STE	S.AV.StartPress	START_EEP	0x01E3	0x01E3	0x01FD	Start EPAP [cmH2O] (4.0 .. 15.0 step 0.2); ASV Start EPAP
+STE	S.AV.StartPress	START_EEP	0x01E3	0x01E3	0x01FD	ASV ramp start EPAP [cmH2O] (4.0 .. 15.0 step 0.2)
 STK			0x0194	0x0194	0x01A9	Application runtime tick counter; incremented once per 10 ms update and used as the event timestamp timebase
-STP	S.C.StartPress	START_PRESSR	0x01D2	0x01D2	0x01EA	CPAP Start Pressure
+STP	S.C.StartPress	START_PRESSR	0x01D2	0x01D2	0x01EA	CPAP ramp start pressure [cmH2O]; therapy pressure is set by IPC
 STR			0x02C9	0x02CA	0x0301	EDF session statistics channel
-STU	S.AS.StartPress	START_A_PRES	0x01D4	0x01D4	0x01EC	AutoSet Start Pressure
-STV	S.VA.StartPress	START_VAUTO_PRES	0x01D8	0x01D8	0x01F0	Start EPAP [cmH2O] (4.0 .. 25.0 step 0.2); VAuto Start EPAP
+STU	S.AS.StartPress	START_A_PRES	0x01D4	0x01D4	0x01EC	AutoSet/APAP/AutoSet for Her ramp start pressure [cmH2O]; therapy pressure range is set by MPI and MPA
+STV	S.VA.StartPress	START_VAUTO_PRES	0x01D8	0x01D8	0x01F0	VAuto ramp start EPAP [cmH2O] (4.0 .. 25.0 step 0.2)
 STW			0x0195	0x0195	0x01AA	
 SYC	Fault.Humidifier	CLIMATE_CONTROL_ERROR	0x01FF	0x01FF	0x021D	Climate Control Error
 SYH	Fault.HeatedTube	HEATED_TUBE_ERROR	0x0200	0x0200	0x021E	Heated Tube Error
