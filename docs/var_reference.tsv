@@ -235,10 +235,10 @@ HRX	HeartRate.Max	HEART_RATE_MAX			0x007B	Lumis SX584-020x exclusive; Heart Rate
 HSC			0x010A	0x010A	0x011B	
 HTB	HeatedTube	HEATED_TUBE	0x0225	0x0225	0x0249	Heated Tube Detected
 HTC			0x0249	0x0249	0x0273	
-HTF		HEAT_TB_SET_F	0x005B	0x005B	0x0060	Tube Temp. [°F] (60 .. 86 step 1); Tube Temp
+HTF		HEAT_TB_SET_F	0x005B	0x005B	0x0060	Tube temperature setting [degF] (60 .. 86 step 1), raw = temperature * 10; when TMU=1, displayed in GUI and synchronized HTF -> HTS; write HTF through UART only when TMU=1, otherwise it is overwritten from HTS
 HTM	HTubeTemp.50	HEATED_TUBE_TEMP_MED	0x0067	0x0067	0x006C	Heated Tube Temp Median
 HTR			0x010B	0x010B	0x011C	Heated-tube status bits from STM8 command 07/00; monitored for peripheral fault conditions
-HTS	S.Temp	HEAT_TB_SET	0x005A	0x005A	0x005F	Tube Temp
+HTS	S.Temp	HEAT_TB_SET	0x005A	0x005A	0x005F	Tube temperature setting [degC] (16 .. 30 step 1), raw = temperature * 10; used by tube heating and STR S.Temp; when TMU=0, displayed in GUI and synchronized HTS -> HTF; write HTS through UART only when TMU=0, otherwise it is overwritten from HTF
 HTT		HEATED_TUBE_TEMPERATURE	0x0066	0x0066	0x006B	Heated Tube Temp
 HTX	S.TempEnable	HEATED_TUBE_SETTING_ENABLE	0x0226	0x0226	0x024A	Tube Temp Enable
 HUC			0x025C	0x025D	0x0286	
@@ -588,7 +588,7 @@ TIT			0x015E	0x015E	0x0170
 TLF		THERAPY_LED_ENABLE	0x0235	0x0235	0x025A	Therapy LED
 TMD			0x01BB	0x01BB	0x01D3	
 TMM			0x0292	0x0293	0x02C8	
-TMU		TEMP_UNIT	0x022A	0x022A	0x024E	Temp. Units
+TMU		TEMP_UNIT	0x022A	0x022A	0x024E	Temperature units: 0=degC, 1=degF; shared callback with HTS/HTF selects synchronization direction by TMU, not by the variable written: 0 copies converted HTS to HTF, 1 copies converted HTF to HTS; UART writes should target HTS for 0 or HTF for 1
 TPA		TUBE_POWER_APPLIED	0x0061	0x0061	0x0066	Tube Power Applied
 TPM	HTubePow.50	HEATED_TUBE_PWM_MED	0x0063	0x0063	0x0068	Heated Tube PWM Median
 TRD			0x00F9	0x00F9	0x010A	Total AI (0.0 .. 240.0 step 0.1)
