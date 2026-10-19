@@ -6,6 +6,13 @@ typedef unsigned int u32;
 
 #define CLOCK_HIDDEN 0xfffu
 
+/* ZML numbers the four therapy pages consecutively on both families. */
+#if defined(CDX_VER_0204) || defined(CDX_VER_0205)
+#define THERAPY_PAGE_FIRST 9
+#else
+#define THERAPY_PAGE_FIRST 8
+#endif
+
 struct root_screen {
     u32 methods;
     u32 window_methods;
@@ -34,7 +41,8 @@ static u16 current_clock(const struct root_screen *root)
 
     unsigned page = variable_get_by_id(VAR_ID_ZML);
     if (!((page == 0 && root->title == 0) ||
-          (page >= 8 && page <= 11 && (root->title == 7 || root->title == 8))))
+          (page >= THERAPY_PAGE_FIRST && page < THERAPY_PAGE_FIRST + 4 &&
+           (root->title == 7 || root->title == 8))))
         return CLOCK_HIDDEN;
 
     unsigned time = variable_get_by_id(VAR_ID_TIC);

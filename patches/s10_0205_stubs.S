@@ -29,6 +29,14 @@ NSTUB(0x080A1691, file_get_size)
 // Backlight
 NSTUB(0x080546AF, backlight_state_machine)
 
+// Header clock
+NSTUB(0x0803BF13, gui_root_screen_init)
+NSTUB(0x0803C125, gui_root_screen_get)
+NSTUB(0x0803BF7B, gui_root_screen_layout_right_widgets)
+NSTUB(0x080431F3, gui_disp_string_at_utf8)
+NSTUB(0x080431E1, gui_get_string_width)
+NSTUB(0x0804F2E9, WM_InvalidateRect)
+
 // UART metadata and formatting
 NSTUB(0x08004101, ccx_get_globals)
 NSTUB(0x0803ED97, variable_handler_get_uart_name)

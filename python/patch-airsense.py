@@ -2191,17 +2191,20 @@ class ASFirmwarePatches(CompiledPayloadMixin):
 
     def patch_header_clock(self):
         """Show TIC as HH:MM in the Home and on-therapy headers."""
-        if not self._supports_compiled_payloads():
-            return PatchOutcome.skip("unsupported CDX version %s" % self.asf.cdx_ver)
         # Title draw, title width, root constructor call, root update vtable slot.
         sites = {
-            '0302': (0x64176, 0x6418a, 0x6420a, 0xf451c),
-            '0305': (0x6489a, 0x648ae, 0x6492e, 0xf4c30),
-            '0306': (0x6489a, 0x648ae, 0x6492e, 0xf4c34),
-            '0401': (0x6489a, 0x648ae, 0x6492e, 0xf4e94),
-            '0402': (0x6489a, 0x648ae, 0x6492e, 0xf510c),
+            'SX584-0204': (0x3c09e, 0x3c0b2, 0x3c132, 0xdb99c),
+            'SX584-0205': (0x3c09e, 0x3c0b2, 0x3c132, 0xdbc00),
+            'SX567-0302': (0x64176, 0x6418a, 0x6420a, 0xf451c),
+            'SX567-0305': (0x6489a, 0x648ae, 0x6492e, 0xf4c30),
+            'SX567-0306': (0x6489a, 0x648ae, 0x6492e, 0xf4c34),
+            'SX567-0401': (0x6489a, 0x648ae, 0x6492e, 0xf4e94),
+            'SX567-0402': (0x6489a, 0x648ae, 0x6492e, 0xf510c),
         }
-        draw, width, ctor, update = sites[self._payload_version_key()]
+        profile = sites.get(self.asf.cdx_ver)
+        if profile is None:
+            return PatchOutcome.skip("unsupported CDX version %s" % self.asf.cdx_ver)
+        draw, width, ctor, update = profile
         data, _, elf_path = self._load_versioned_payload('header_clock')
         replacements = []
         for site, original, wrapper in (

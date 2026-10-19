@@ -32,7 +32,7 @@ ifneq ($(V),1)
 endif
 
 PAYLOAD_LAYOUT_VERSIONS := 0204 0205 0302 0305 0306 0401 0402
-PAYLOADS_0204 := target_rh mop_callback_dispatcher custom_menu_hooks uart_stream_schema backlight_adapt
+PAYLOADS_0204 := target_rh mop_callback_dispatcher custom_menu_hooks uart_stream_schema backlight_adapt header_clock
 PAYLOADS_0205 := $(PAYLOADS_0204)
 PAYLOADS_0302 := mop_callback_dispatcher vid_spoof graph squarewave asv_task_wrapper \
 	common_code backlight_adapt wrapper_limit_max_pdiff s10_lcd_ili9325 custom_menu_hooks \
