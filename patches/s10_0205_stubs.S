@@ -29,6 +29,13 @@ NSTUB(0x080A1691, file_get_size)
 // Backlight
 NSTUB(0x080546AF, backlight_state_machine)
 
+// LCD
+NSTUB(0x080634EF, lcd_write_cmd)
+NSTUB(0x080634F7, lcd_write_data)
+NSTUB(0x08061253, lcd_delay_ms)
+NSTUB(0x0805CC6D, original_board_init)
+NSTUB(0x08063393, lcd_get_device)
+
 // Header clock
 NSTUB(0x0803BF13, gui_root_screen_init)
 NSTUB(0x0803C125, gui_root_screen_get)

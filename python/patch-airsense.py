@@ -1951,16 +1951,17 @@ class ASFirmwarePatches(CompiledPayloadMixin):
 
     def patch_lcd_ili9325(self):
         """Universal ILI9325/ILI9328 + ILI9341 LCD driver"""
-        ver = self._payload_version_key()
-        BL_OFF_MAP = {
-            '0302': 0x7b8bc,
-            '0305': 0x7c034,
-            '0306': 0x7c030,
-            '0401': 0x7c030,
-            '0402': 0x7c030,
+        sites = {
+            'SX584-0204': 0x5cd10,
+            'SX584-0205': 0x5cf74,
+            'SX567-0302': 0x7b8bc,
+            'SX567-0305': 0x7c034,
+            'SX567-0306': 0x7c030,
+            'SX567-0401': 0x7c030,
+            'SX567-0402': 0x7c030,
         }
-        bl_off = BL_OFF_MAP.get(ver)
-        if not self._supports_compiled_payloads() or bl_off is None:
+        bl_off = sites.get(self.asf.cdx_ver)
+        if bl_off is None:
             return PatchOutcome.skip("unsupported CDX version %s" % self.asf.cdx_ver)
         expected_bl = b'\xFF\xF7\x7A\xFE'
         if self.asf.read_bytes(bl_off, 4) != expected_bl:
