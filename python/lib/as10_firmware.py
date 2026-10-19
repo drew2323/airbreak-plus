@@ -39,12 +39,16 @@ class ASFirmware(object):
         },
     }
 
+    # Descriptor tables in var_id order.
     TABLES = {
         3:  dict(stride=10),
         4:  dict(stride=0x1C),
         6:  dict(stride=0x18),
         8:  dict(stride=0x14),
         9:  dict(stride=0x18),
+        10: dict(stride=0x24),
+        17: dict(stride=8, count=1),
+        18: dict(stride=8, count=1),
     }
 
     # Descriptor field offsets. Keep these in one place so patch code does not
@@ -205,7 +209,15 @@ class ASFirmware(object):
         return min(candidates) if candidates else None
 
     def _table_count(self, table_num, base, stride):
-        """Derive a descriptor count from its globals[] boundary and stride."""
+        """Return descriptor count from the table layout or globals[] boundary."""
+        # Signal arrays follow g[10] before the next globals[] target. Its ID
+        # range starts at PCC and ends immediately before the DAC descriptor.
+        if table_num == 10:
+            return self.find_var_id_by_name('DAC') - self.find_var_id_by_name('PCC')
+        # Date/time roots each contain one descriptor; following arrays belong
+        # to other structures, not to additional date/time variables.
+        if 'count' in self.TABLES[table_num]:
+            return self.TABLES[table_num]['count']
         end = self._next_global_offset_after(base)
         if end is None:
             raise ValueError("cannot infer globals[%d] count" % table_num)
@@ -252,7 +264,7 @@ class ASFirmware(object):
 
         self.var_tables = {}
         expected_base = None
-        for table_num in (3, 4, 6, 8, 9):
+        for table_num in self.TABLES:
             ptr = self.read_u32(self.globals_addr + table_num * 4)
             base = self._flash_ptr_offset(ptr)
             if base is None:

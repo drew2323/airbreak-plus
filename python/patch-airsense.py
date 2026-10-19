@@ -339,9 +339,9 @@ class ASFirmwarePatches(CompiledPayloadMixin):
 
         self.asf._load_var_tables()
         for table_num, tbl in self.asf.var_tables.items():
-            if table_num == 3:
+            if table_num in (3, 17, 18):
                 offsets = (0x06,)
-            elif table_num == 4:
+            elif table_num in (4, 10):
                 offsets = (self.asf.G4_NAME_STR, self.asf.G4_UNITS_STR)
             elif table_num == 6:
                 offsets = (self.asf.G6_LABEL_STR,)
