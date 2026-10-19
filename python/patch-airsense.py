@@ -2227,27 +2227,32 @@ class ASFirmwarePatches(CompiledPayloadMixin):
 
     def patch_backlight_adapt(self):
         """improved backlight response to ambient light"""
-        ver = self._payload_version_key()
-        if not self._supports_compiled_payloads():
+        if self.asf.cdx_ver in ('SX584-0204', 'SX584-0205'):
+            signature = bytes.fromhex('00F01CF9204600F087F90025')
+            gate_delta, expected_gate = 0x256, b'\x4E\xD0'
+        elif self._supports_compiled_payloads():
+            signature = bytes.fromhex('00F0D5F8204600F03CF90025')
+            gate_delta, expected_gate = 0x1C8, b'\x4F\xD0'
+        else:
             return PatchOutcome.skip("unsupported CDX version %s" % self.asf.cdx_ver)
         data, _, elf_path = self._load_versioned_payload('backlight_adapt')
 
-        # signature: bl A1D0; mov r0,r4; bl A2A4; movs r5,#0
+        # bl ambient_update; mov r0,r4; bl backlight_state_machine; movs r5,#0
         try:
-            sig_off = self.asf.find_bytes(bytes.fromhex('00F0D5F8204600F03CF90025'))
+            sig_off = self.asf.find_bytes(signature)
         except ValueError:
             return PatchOutcome.skip("backlight update signature not found")
 
         hook_off = sig_off + 6
-        expected_bl = b'\x00\xF0\x3C\xF9'
+        expected_bl = signature[6:10]
         if self.asf.read_bytes(hook_off, 4) != expected_bl:
             return PatchOutcome.warn(
                 "unexpected bytes at backlight hook site 0x%08X" %
                 (self.asf.FLASH_BASE + hook_off))
 
         # This gate must be removed so ASF continues tracking ASR while the display is active.
-        gate_off = sig_off + 0x1C8
-        if self.asf.read_bytes(gate_off, 2) != b'\x4F\xD0':
+        gate_off = sig_off + gate_delta
+        if self.asf.read_bytes(gate_off, 2) != expected_gate:
             return PatchOutcome.warn("ASF update gate not found at expected offset")
 
         start = self._elf_symbol_addr(elf_path, 'start')

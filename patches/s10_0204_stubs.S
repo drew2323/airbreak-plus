@@ -26,6 +26,9 @@ NSTUB(0x0803EC89, variable_handler_release)
 NSTUB(0x0803EF4D, variable_set_visible_from_handler)
 NSTUB(0x080A13B1, file_get_size)
 
+// Backlight
+NSTUB(0x080546AF, backlight_state_machine)
+
 // UART metadata and formatting
 NSTUB(0x08004101, ccx_get_globals)
 NSTUB(0x0803ED97, variable_handler_get_uart_name)
