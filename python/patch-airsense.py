@@ -107,6 +107,8 @@ class ASFirmwarePatches(CompiledPayloadMixin):
         'SX567-0402': 0x75f48,
     }
     UART_STREAM_SCHEMA_HOOKS = {
+        'SX584-0204': (0xe2f24, 0x080bced1),
+        'SX584-0205': (0xe3188, 0x080bd1b1),
         'SX567-0302': (0xfb3e0, 0x080d947d),
         'SX567-0305': (0xfbb28, 0x080d9c6d),
         'SX567-0306': (0xfbb2c, 0x080d9b81),

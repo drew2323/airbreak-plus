@@ -23,6 +23,7 @@ typedef unsigned short u16;
 typedef unsigned int u32;
 
 #include "custom_menu_registry.h"
+#include "s10_vars.h"
 
 typedef struct {
     u8 field_count;
@@ -61,8 +62,9 @@ extern const u32 uart_stream_schema_original_handler;
 extern const u32 uart_custom_settings_registry_addr;
 
 enum {
-    G26_RECORD_COUNT = 8,
-    G27_RECORD_COUNT = 3,
+    /* Stream objects occupy consecutive ID ranges in g[26], then g[27]. */
+    G26_RECORD_COUNT = VAR_ID_APN - VAR_ID_TCE,
+    G27_RECORD_COUNT = VAR_ID_BRP - VAR_ID_APN,
     VARIABLE_HANDLER_WORDS = 16,
     DESCRIPTOR_NAME_STR_OFFSET = 0x06,
     G4_DECIMALS_OFFSET = 0x14,
