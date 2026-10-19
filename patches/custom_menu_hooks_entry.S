@@ -46,6 +46,21 @@ custom_menu_hook_configuration:
 	movs r2, #4
 	b.n custom_menu_hook_common
 
+#if defined(CDX_VER_0204) || defined(CDX_VER_0205)
+/* Lumis callers keep the menu in r4 and load the returned slot at +0x3c.
+ * Preserve that convention when the inline page array becomes indirect.
+ */
+.global custom_menu_page_slot
+.type custom_menu_page_slot, %function
+.thumb_func
+custom_menu_page_slot:
+	ldrb r0, [r4]
+	ldr ip, [r4, #0x3c]
+	add r0, ip, r0, lsl #2
+	subs r0, #0x3c
+	bx lr
+#endif
+
 /* Patched with the globals[16] index of the renamed CSG storage group. */
 .global custom_settings_group_index
 .type custom_settings_group_index, %object

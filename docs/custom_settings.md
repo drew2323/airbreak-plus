@@ -6,7 +6,7 @@ themselves. A payload can run without the framework by recognizing unpatched
 ABI slots and using its built-in fallback values.
 
 The framework is supported on SX567-0302, SX567-0305, SX567-0306, SX567-0401,
-and SX567-0402.
+SX567-0402, and Lumis SX584-0204/0205.
 
 ## Assignments
 

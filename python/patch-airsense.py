@@ -98,6 +98,8 @@ class ASFirmwarePatches(CompiledPayloadMixin):
 
     PAYLOAD_VERSIONS = frozenset(('0302', '0305', '0306', '0401', '0402'))
     MOP_CALLBACK_TABLES = {
+        'SX584-0204': 0x50888,
+        'SX584-0205': 0x50888,
         'SX567-0302': 0x757e0,
         'SX567-0305': 0x75f4c,
         'SX567-0306': 0x75f48,
@@ -652,6 +654,54 @@ class ASFirmwarePatches(CompiledPayloadMixin):
             b'\x02\xf0\xc5\xfb', b'\x02\xf0\x9c\xfb',
             b'\x02\xf0\xdb\xfa')
         sites_by_version = {
+            'SX584-0204': {
+                'therapy': 0x39026,
+                'comfort': 0x392d8,
+                'accessories': 0x394c2,
+                'options': 0x39538,
+                'configuration': 0x396e6,
+                'clinical_capacity_site': 0x38a9e,
+                'clinical_capacity': 91,
+                'gui_block_size_site': 0x5c9ee,
+                'config_error_size_site': 0xb3330,
+                'config_error_size_expected': b'\xee\xf7\x3e\xf8',
+                'page_create_site': 0x473b8,
+                'page_create_expected': b'\xf0\xf7\x06\xfb',
+                'page_limit_site': 0x4745a,
+                'page_slot_site': 0x4741c,
+                'page_leave_site': 0x47470,
+                'page_indexed_site': 0x47512,
+                'page_activate_site': 0x474cc,
+                'page_activate_method': 0x28,
+                'menu_expected': (
+                    b'\x03\xf0\x3d\xfb', b'\x03\xf0\xe4\xf9',
+                    b'\x03\xf0\xef\xf8', b'\x03\xf0\xb4\xf8',
+                    b'\x02\xf0\xdd\xff'),
+            },
+            'SX584-0205': {
+                'therapy': 0x39026,
+                'comfort': 0x392d8,
+                'accessories': 0x394c2,
+                'options': 0x39538,
+                'configuration': 0x396e6,
+                'clinical_capacity_site': 0x38a9e,
+                'clinical_capacity': 91,
+                'gui_block_size_site': 0x5cc52,
+                'config_error_size_site': 0xb3610,
+                'config_error_size_expected': b'\xee\xf7\x3e\xf8',
+                'page_create_site': 0x473b8,
+                'page_create_expected': b'\xf0\xf7\x06\xfb',
+                'page_limit_site': 0x4745a,
+                'page_slot_site': 0x4741c,
+                'page_leave_site': 0x47470,
+                'page_indexed_site': 0x47512,
+                'page_activate_site': 0x474cc,
+                'page_activate_method': 0x28,
+                'menu_expected': (
+                    b'\x03\xf0\x3d\xfb', b'\x03\xf0\xe4\xf9',
+                    b'\x03\xf0\xef\xf8', b'\x03\xf0\xb4\xf8',
+                    b'\x02\xf0\xdd\xff'),
+            },
             'SX567-0302': {
                 'therapy': 0x61cf4,
                 'comfort': 0x61f52,
@@ -807,7 +857,7 @@ class ASFirmwarePatches(CompiledPayloadMixin):
 
         self._patch_clinical_menu_capacity(sites['clinical_capacity_site'], sites['clinical_capacity'])
 
-        # Preallocate 572 GUI handles instead of 270 in the same 36500-byte pool.
+        # Preallocate more GUI handles within the existing GUI memory pool.
         # Growing the table later needs room for both the old and new copies.
         self._replace_bytes_checked(sites['gui_block_size_site'], b'\x80\x20',
                                     b'\x38\x20', 'custom settings GUI handle allocation')
@@ -843,25 +893,48 @@ class ASFirmwarePatches(CompiledPayloadMixin):
                 sites['page_create_site'], sites['page_create_expected'],
                 page_wrapper, 'menu page constructor')
             self._custom_detail(detail)
-            self._replace_bytes_checked(
-                sites['page_direct_site'],
-                b'\x20\x78\x04\xeb\x80\x00\x29\x46\xc0\x6b',
-                b'\xe0\x6b\x22\x78\x50\xf8\x22\x00\x29\x46',
-                'direct current-page lookup')
-            self._replace_bytes_checked(
-                sites['page_zero_site'],
-                b'\x20\x78\x04\xeb\x80\x00\x00\x21\xc0\x6b\x70\x47',
-                b'\xe0\x6b\x22\x78\x50\xf8\x22\x00\x00\x21\x70\x47',
-                'zero-argument page resolver')
-            self._replace_bytes_checked(
-                sites['page_get_site'],
-                b'\x20\x78\x04\xeb\x80\x00\xc0\x6b\x70\x47',
-                b'\xe0\x6b\x22\x78\x50\xf8\x22\x00\x70\x47',
-                'current-page resolver')
+            if 'page_slot_site' in sites:
+                # Lumis shares a slot-address helper whose callers load [r0,#0x3c].
+                # Keep that calling convention while redirecting it to the new table.
+                slot_site = sites['page_slot_site']
+                slot_hook = self._elf_symbol_addr(elf_path, 'custom_menu_page_slot')
+                branch = bytearray(self._encode_thumb_bl(slot_site, slot_hook))
+                branch[3] &= ~0x40  # BL -> B.W; preserve the caller's LR.
+                self._replace_bytes_checked(
+                    slot_site, b'\x20\x78\x04\xeb', bytes(branch),
+                    'current-page slot resolver')
+                self._replace_bytes_checked(
+                    sites['page_leave_site'],
+                    b'\x04\xeb\x80\x00\x00\x21\xc0\x6b',
+                    b'\xe1\x6b\x51\xf8\x20\x00\x00\x21',
+                    'previous-page lookup')
+                self._replace_bytes_checked(
+                    sites['page_indexed_site'],
+                    b'\x00\xeb\x81\x00\xc0\x6b\x70\x47',
+                    b'\xc0\x6b\x50\xf8\x21\x00\x70\x47',
+                    'indexed page resolver')
+            else:
+                self._replace_bytes_checked(
+                    sites['page_direct_site'],
+                    b'\x20\x78\x04\xeb\x80\x00\x29\x46\xc0\x6b',
+                    b'\xe0\x6b\x22\x78\x50\xf8\x22\x00\x29\x46',
+                    'direct current-page lookup')
+                self._replace_bytes_checked(
+                    sites['page_zero_site'],
+                    b'\x20\x78\x04\xeb\x80\x00\x00\x21\xc0\x6b\x70\x47',
+                    b'\xe0\x6b\x22\x78\x50\xf8\x22\x00\x00\x21\x70\x47',
+                    'zero-argument page resolver')
+                self._replace_bytes_checked(
+                    sites['page_get_site'],
+                    b'\x20\x78\x04\xeb\x80\x00\xc0\x6b\x70\x47',
+                    b'\xe0\x6b\x22\x78\x50\xf8\x22\x00\x70\x47',
+                    'current-page resolver')
+            # The page activation virtual method occupies a different slot in Lumis.
+            activate_load = struct.pack('<H', 0x6809 | (sites.get('page_activate_method', 0x2c) // 4 << 6))
             self._replace_bytes_checked(
                 sites['page_activate_site'],
-                b'\x20\x78\x04\xeb\x80\x00\xc0\x6b\x01\x68\xc9\x6a\x08\x47',
-                b'\xe0\x6b\x21\x78\x50\xf8\x21\x00\x01\x68\xc9\x6a\x08\x47',
+                b'\x20\x78\x04\xeb\x80\x00\xc0\x6b\x01\x68' + activate_load + b'\x08\x47',
+                b'\xe0\x6b\x21\x78\x50\xf8\x21\x00\x01\x68' + activate_load + b'\x08\x47',
                 'current-page activation')
             self.asf.write_u8(page_limit_site, total_page_count)
             self._custom_detail(
@@ -1187,6 +1260,28 @@ class ASFirmwarePatches(CompiledPayloadMixin):
         hold recurrence periods, while RDF/RDM/RDH/RDW hold due dates.
         """
         sites_by_version = {
+            'SX584-0204': {
+                'reminders_tick': 0xd2042,
+                'reminder_list_create': 0xd210c,
+                'reminder_state_update': 0x50988,
+                'reminder_menu_item': 0x3953c,
+                'reminder_menu_item_end': 0x39578,
+                'reminder_menu': 0x3a8d6,
+                'reminder_menu_end': 0x3ab32,
+                'reminder_page_store': b'\xec\x67',  # str r4,[r5,#0x7c]
+                'reclaimed_string_ids': (0x004E, 0x00C6, 0x00C7, 0x00C8, 0x00C9),
+            },
+            'SX584-0205': {
+                'reminders_tick': 0xd2322,
+                'reminder_list_create': 0xd23ec,
+                'reminder_state_update': 0x50988,
+                'reminder_menu_item': 0x3953c,
+                'reminder_menu_item_end': 0x39578,
+                'reminder_menu': 0x3a8d6,
+                'reminder_menu_end': 0x3ab32,
+                'reminder_page_store': b'\xec\x67',  # str r4,[r5,#0x7c]
+                'reclaimed_string_ids': (0x004E, 0x00C6, 0x00C7, 0x00C8, 0x00C9),
+            },
             'SX567-0302': {
                 'reminders_tick': 0xebace,
                 'reminder_list_create': 0xebb98,
@@ -1195,6 +1290,7 @@ class ASFirmwarePatches(CompiledPayloadMixin):
                 'reminder_menu_item_end': 0x62070,
                 'reminder_menu': 0x63058,
                 'reminder_menu_end': 0x632b4,
+                'reminder_page_store': b'\x6c\x67',  # str r4,[r5,#0x74]
                 'reclaimed_string_ids': (0x0048, 0x00B7, 0x00B8, 0x00B9, 0x00BA), # Reminders + four reminder message bodies
             },
             'SX567-0305': {
@@ -1205,6 +1301,7 @@ class ASFirmwarePatches(CompiledPayloadMixin):
                 'reminder_menu_item_end': 0x62790,
                 'reminder_menu': 0x63778,
                 'reminder_menu_end': 0x639d4,
+                'reminder_page_store': b'\x6c\x67',  # str r4,[r5,#0x74]
                 'reclaimed_string_ids': (0x0048, 0x00B7, 0x00B8, 0x00B9, 0x00BA), # Reminders + four reminder message bodies
             },
             'SX567-0306': {
@@ -1215,6 +1312,7 @@ class ASFirmwarePatches(CompiledPayloadMixin):
                 'reminder_menu_item_end': 0x62790,
                 'reminder_menu': 0x63778,
                 'reminder_menu_end': 0x639d4,
+                'reminder_page_store': b'\x6c\x67',  # str r4,[r5,#0x74]
                 'reclaimed_string_ids': (0x0048, 0x00B7, 0x00B8, 0x00B9, 0x00BA), # Reminders + four reminder message bodies
             },
             'SX567-0401': {
@@ -1225,6 +1323,7 @@ class ASFirmwarePatches(CompiledPayloadMixin):
                 'reminder_menu_item_end': 0x62790,
                 'reminder_menu': 0x63778,
                 'reminder_menu_end': 0x639d4,
+                'reminder_page_store': b'\x6c\x67',  # str r4,[r5,#0x74]
                 'reclaimed_string_ids': (0x0048, 0x00B7, 0x00B8, 0x00B9, 0x00BA), # Reminders + four reminder message bodies
             },
             'SX567-0402': {
@@ -1235,6 +1334,7 @@ class ASFirmwarePatches(CompiledPayloadMixin):
                 'reminder_menu_item_end': 0x62790,
                 'reminder_menu': 0x63778,
                 'reminder_menu_end': 0x639d4,
+                'reminder_page_store': b'\x6c\x67',  # str r4,[r5,#0x74]
                 'reclaimed_string_ids': (0x0048, 0x00B7, 0x00B8, 0x00B9, 0x00BA), # Reminders + four reminder message bodies
             },
         }
@@ -1284,7 +1384,8 @@ class ASFirmwarePatches(CompiledPayloadMixin):
         # constructor body as the generated custom-menu registry.
         if self._replace_bytes_checked(
                 reminder_menu, b'\x2c\x20\x00\xf0',
-                b'\x00\x24\x6c\x67\x2a\xe1', 'reminder menu',
+                b'\x00\x24' + sites['reminder_page_store'] + b'\x2a\xe1',
+                'reminder menu',
                 accept_existing=True):
             self.asf.fill_range(reclaim, reclaim_size, 0xff)
 
@@ -1604,12 +1705,16 @@ class ASFirmwarePatches(CompiledPayloadMixin):
 
     def enable_ivaps_settings(self):
         """Request the firmware-backed iVAPS controls from custom settings."""
+        if self.asf.cdx_ver in ('SX584-0204', 'SX584-0205'):
+            return PatchOutcome.skip('iVAPS controls are already present in the stock Lumis menu')
         self.enabled_custom_settings_features.add('ivaps')
         return PatchOutcome.ok()
 
     def patch_target_rh(self, percent):
         """Set the climate model's target RH for Auto and manual humidity levels."""
         getters = {
+            'SX584-0204': 0xb64cc,
+            'SX584-0205': 0xb67ac,
             'SX567-0302': 0xd221c,
             'SX567-0305': 0xd2a0c,
             'SX567-0306': 0xd2920,

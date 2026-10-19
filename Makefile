@@ -31,7 +31,9 @@ ifneq ($(V),1)
 .SILENT:
 endif
 
-PAYLOAD_LAYOUT_VERSIONS := 0302 0305 0306 0401 0402
+PAYLOAD_LAYOUT_VERSIONS := 0204 0205 0302 0305 0306 0401 0402
+PAYLOADS_0204 := target_rh mop_callback_dispatcher custom_menu_hooks
+PAYLOADS_0205 := $(PAYLOADS_0204)
 PAYLOADS_0302 := mop_callback_dispatcher vid_spoof graph squarewave asv_task_wrapper \
 	common_code backlight_adapt wrapper_limit_max_pdiff s10_lcd_ili9325 custom_menu_hooks \
 	uart_stream_schema language_fonts target_rh header_clock
@@ -206,11 +208,6 @@ $(BUILD)/wrapper_limit_max_pdiff_$(1).probe.elf: $(BUILD)/wrapper_limit_max_pdif
 		--just-symbols=$$(BUILD)/common_code_$(1).probe.elf \
 		--entry start --sort-section=name -o $$@ $(BUILD)/wrapper_limit_max_pdiff_$(1).o $(BUILD)/wrapper_limit_max_pdiff_abi_$(1).o $(BUILD)/s10_$(1)_stubs.o
 
-$(BUILD)/custom_menu_hooks_$(1).probe.elf: $(BUILD)/custom_menu_hooks_entry_$(1).o $(BUILD)/custom_menu_hooks_$(1).o $(BUILD)/s10_$(1)_stubs.o | $(BUILD)
-	$$(LD) --nostdlib --no-dynamic-linker \
-		--Ttext $(PROBE_LINK_ADDR) \
-		--entry custom_menu_hook_therapy -o $$@ $$^
-
 $(BUILD)/common_code_$(1).elf: $(BUILD)/common_code_$(1).o $(BUILD)/s10_$(1)_stubs.o $(BUILD)/payload_layout_$(1).tsv | $(BUILD)
 	@set -e; addr=$$$$(awk -v name=common_code '$$$$1 == name { print $$$$2; found=1; exit } END { if (!found) exit 1 }' $(BUILD)/payload_layout_$(1).tsv); \
 	$$(LD) --nostdlib --no-dynamic-linker \
@@ -238,6 +235,16 @@ $(BUILD)/wrapper_limit_max_pdiff_$(1).elf: $(BUILD)/wrapper_limit_max_pdiff_$(1)
 		--just-symbols=$$(BUILD)/common_code_$(1).elf \
 		--entry start --sort-section=name -o $$@ $(BUILD)/wrapper_limit_max_pdiff_$(1).o $(BUILD)/wrapper_limit_max_pdiff_abi_$(1).o $(BUILD)/s10_$(1)_stubs.o
 
+endef
+
+$(foreach v,$(S10_CODE_VERSIONS),$(eval $(call S10_CODE_VERSION_template,$(v))))
+
+define S10_CUSTOM_MENU_HOOKS_template
+$(BUILD)/custom_menu_hooks_$(1).probe.elf: $(BUILD)/custom_menu_hooks_entry_$(1).o $(BUILD)/custom_menu_hooks_$(1).o $(BUILD)/s10_$(1)_stubs.o | $(BUILD)
+	$$(LD) --nostdlib --no-dynamic-linker \
+		--Ttext $(PROBE_LINK_ADDR) \
+		--entry custom_menu_hook_therapy -o $$@ $$^
+
 $(BUILD)/custom_menu_hooks_$(1).elf: $(BUILD)/custom_menu_hooks_entry_$(1).o $(BUILD)/custom_menu_hooks_$(1).o $(BUILD)/s10_$(1)_stubs.o $(BUILD)/payload_layout_$(1).tsv | $(BUILD)
 	@set -e; addr=$$$$(awk -v name=custom_menu_hooks '$$$$1 == name { print $$$$2; found=1; exit } END { if (!found) exit 1 }' $(BUILD)/payload_layout_$(1).tsv); \
 	$$(LD) --nostdlib --no-dynamic-linker \
@@ -246,7 +253,7 @@ $(BUILD)/custom_menu_hooks_$(1).elf: $(BUILD)/custom_menu_hooks_entry_$(1).o $(B
 
 endef
 
-$(foreach v,$(S10_CODE_VERSIONS),$(eval $(call S10_CODE_VERSION_template,$(v))))
+$(foreach v,$(call payload_versions,custom_menu_hooks),$(eval $(call S10_CUSTOM_MENU_HOOKS_template,$(v))))
 
 define S10_STANDALONE_PAYLOAD_template
 $(BUILD)/$(1)_$(2).probe.elf: $(BUILD)/$(1)_$(2).o $(if $(wildcard $(SRC)/$(1)_abi.S),$(BUILD)/$(1)_abi_$(2).o) $(BUILD)/s10_$(2)_stubs.o | $(BUILD)

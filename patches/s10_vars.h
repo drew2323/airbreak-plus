@@ -1,7 +1,11 @@
 #ifndef S10_VARS_H
 #define S10_VARS_H
 
-#if defined(CDX_VER_0302)
+#if defined(CDX_VER_0204)
+#include "s10_vars_0204.h"
+#elif defined(CDX_VER_0205)
+#include "s10_vars_0205.h"
+#elif defined(CDX_VER_0302)
 #include "s10_vars_0302.h"
 #elif defined(CDX_VER_0305)
 #include "s10_vars_0305.h"
