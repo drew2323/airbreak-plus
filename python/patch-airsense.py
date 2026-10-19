@@ -1917,16 +1917,17 @@ class ASFirmwarePatches(CompiledPayloadMixin):
 
     def patch_asv_task_wrapper(self):
         """Add runtime-controllable ASV backup-rate suppression."""
-        ver = self._payload_version_key()
-        FPTR = {
-            '0302': 0xf3b68,
-            '0305': 0xf427c,
-            '0306': 0xf4280,
-            '0401': 0xf44e0,
-            '0402': 0xf4758,
+        sites = {
+            'SX584-0204': 0xda980,
+            'SX584-0205': 0xdabe4,
+            'SX567-0302': 0xf3b68,
+            'SX567-0305': 0xf427c,
+            'SX567-0306': 0xf4280,
+            'SX567-0401': 0xf44e0,
+            'SX567-0402': 0xf4758,
         }
-        fptr = FPTR.get(ver)
-        if not self._supports_compiled_payloads() or fptr is None:
+        fptr = sites.get(self.asf.cdx_ver)
+        if fptr is None:
             return PatchOutcome.skip("unsupported CDX version %s" % self.asf.cdx_ver)
         details = self._inject_function_pointer_payload('asv_task_wrapper', fptr, 'ASV task handler pointer')
         return PatchOutcome.ok(None, *details)

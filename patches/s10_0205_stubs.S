@@ -4,6 +4,10 @@
 	.global name; \
 	.type name, %function; \
 	name = addr
+#define NSTUB_VAR(addr,name) \
+	.global name; \
+	.type name, %object; \
+	name = addr
 
 .text
 
@@ -25,6 +29,11 @@ NSTUB(0x0803EC6D, variable_lookup_handler)
 NSTUB(0x0803EC89, variable_handler_release)
 NSTUB(0x0803EF4D, variable_set_visible_from_handler)
 NSTUB(0x080A1691, file_get_size)
+
+// ASV backup rate: integer state 0x3c and float phase 0x5b.
+NSTUB_VAR(0x20009738, isNotBreathingPtr)
+NSTUB_VAR(0x20009A04, breathPercentagePtr)
+NSTUB(0x080C8C5D, asv_task_function)
 
 // Backlight
 NSTUB(0x080546AF, backlight_state_machine)
