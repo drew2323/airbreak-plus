@@ -1260,6 +1260,8 @@ class ASFirmwarePatches(CompiledPayloadMixin):
         g[8] RPF/RPO/RPH/RPW are recurrence enables for Filter/Mask/Tube/Water Tub.
         g[8] RXF/RXM/RXH/RXW are their reminder-date enables. g[4] RCF/RCM/RCH/RCW
         hold recurrence periods, while RDF/RDM/RDH/RDW hold due dates.
+        String candidates include the menu title, six message bodies and the
+        shared Reminder popup heading.
         """
         sites_by_version = {
             'SX584-0204': {
@@ -1271,7 +1273,7 @@ class ASFirmwarePatches(CompiledPayloadMixin):
                 'reminder_menu': 0x3a8d6,
                 'reminder_menu_end': 0x3ab32,
                 'reminder_page_store': b'\xec\x67',  # str r4,[r5,#0x7c]
-                'reclaimed_string_ids': (0x004E, 0x00C6, 0x00C7, 0x00C8, 0x00C9),
+                'reclaimed_string_ids': (0x004E, 0x00C6, 0x00C7, 0x00C8, 0x00C9, 0x00CA, 0x00CB, 0x00AD),
             },
             'SX584-0205': {
                 'reminders_tick': 0xd2322,
@@ -1282,7 +1284,7 @@ class ASFirmwarePatches(CompiledPayloadMixin):
                 'reminder_menu': 0x3a8d6,
                 'reminder_menu_end': 0x3ab32,
                 'reminder_page_store': b'\xec\x67',  # str r4,[r5,#0x7c]
-                'reclaimed_string_ids': (0x004E, 0x00C6, 0x00C7, 0x00C8, 0x00C9),
+                'reclaimed_string_ids': (0x004E, 0x00C6, 0x00C7, 0x00C8, 0x00C9, 0x00CA, 0x00CB, 0x00AD),
             },
             'SX567-0302': {
                 'reminders_tick': 0xebace,
@@ -1293,7 +1295,7 @@ class ASFirmwarePatches(CompiledPayloadMixin):
                 'reminder_menu': 0x63058,
                 'reminder_menu_end': 0x632b4,
                 'reminder_page_store': b'\x6c\x67',  # str r4,[r5,#0x74]
-                'reclaimed_string_ids': (0x0048, 0x00B7, 0x00B8, 0x00B9, 0x00BA), # Reminders + four reminder message bodies
+                'reclaimed_string_ids': (0x0048, 0x00B9, 0x00BA, 0x00BB, 0x00BC, 0x00BD, 0x00BE, 0x00A1),
             },
             'SX567-0305': {
                 'reminders_tick': 0xec2ca,
@@ -1304,7 +1306,7 @@ class ASFirmwarePatches(CompiledPayloadMixin):
                 'reminder_menu': 0x63778,
                 'reminder_menu_end': 0x639d4,
                 'reminder_page_store': b'\x6c\x67',  # str r4,[r5,#0x74]
-                'reclaimed_string_ids': (0x0048, 0x00B7, 0x00B8, 0x00B9, 0x00BA), # Reminders + four reminder message bodies
+                'reclaimed_string_ids': (0x0048, 0x00B7, 0x00B8, 0x00B9, 0x00BA, 0x00BB, 0x00BC, 0x009F),
             },
             'SX567-0306': {
                 'reminders_tick': 0xec1e6,
@@ -1315,7 +1317,7 @@ class ASFirmwarePatches(CompiledPayloadMixin):
                 'reminder_menu': 0x63778,
                 'reminder_menu_end': 0x639d4,
                 'reminder_page_store': b'\x6c\x67',  # str r4,[r5,#0x74]
-                'reclaimed_string_ids': (0x0048, 0x00B7, 0x00B8, 0x00B9, 0x00BA), # Reminders + four reminder message bodies
+                'reclaimed_string_ids': (0x0048, 0x00B7, 0x00B8, 0x00B9, 0x00BA, 0x00BB, 0x00BC, 0x009F),
             },
             'SX567-0401': {
                 'reminders_tick': 0xec446,
@@ -1326,7 +1328,7 @@ class ASFirmwarePatches(CompiledPayloadMixin):
                 'reminder_menu': 0x63778,
                 'reminder_menu_end': 0x639d4,
                 'reminder_page_store': b'\x6c\x67',  # str r4,[r5,#0x74]
-                'reclaimed_string_ids': (0x0048, 0x00B7, 0x00B8, 0x00B9, 0x00BA), # Reminders + four reminder message bodies
+                'reclaimed_string_ids': (0x0048, 0x00B7, 0x00B8, 0x00B9, 0x00BA, 0x00BB, 0x00BC, 0x009F),
             },
             'SX567-0402': {
                 'reminders_tick': 0xec6be,
@@ -1337,7 +1339,7 @@ class ASFirmwarePatches(CompiledPayloadMixin):
                 'reminder_menu': 0x63778,
                 'reminder_menu_end': 0x639d4,
                 'reminder_page_store': b'\x6c\x67',  # str r4,[r5,#0x74]
-                'reclaimed_string_ids': (0x0048, 0x00B7, 0x00B8, 0x00B9, 0x00BA), # Reminders + four reminder message bodies
+                'reclaimed_string_ids': (0x0048, 0x00B7, 0x00B8, 0x00B9, 0x00BA, 0x00BB, 0x00BC, 0x009F),
             },
         }
         sites = sites_by_version.get(self.asf.cdx_ver)
