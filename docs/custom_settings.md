@@ -89,6 +89,7 @@ The reclaim pass disables:
 - periodic Reminder processing
 - the hardcoded `RX*` to `RC*` state updater
 - construction of the Reminder record list
+- forwarding popup acknowledgements to `RSA`
 - the Reminders row in clinical Options
 - construction of the Reminders page
 
@@ -101,6 +102,7 @@ It then makes these variables available in typed pools:
 |-------|-----------|---------------|
 | g[8] | RPF, RPO, RPH, RPW | recurrence enable for Filter, Mask, Tube, and Water Tub |
 | g[8] | RXF, RXM, RXH, RXW | reminder-date enable for Filter, Mask, Tube, and Water Tub |
+| g[8] | RSA | runtime reminder acknowledgement request |
 | g[4] | RCF, RCM, RCH, RCW | recurrence period in months |
 | g[4] | RDF, RDM, RDH, RDW | reminder due date |
 

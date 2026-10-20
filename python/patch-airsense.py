@@ -1255,11 +1255,12 @@ class ASFirmwarePatches(CompiledPayloadMixin):
         self._print_resource_summary_line("free reclaimed str_id", free_str_ids)
 
     def custom_patch_settings_reclaim_reminders(self):
-        """Disable stock Reminders behavior and reclaim its storage-backed vars.
+        """Disable stock Reminders behavior and reclaim its variables.
 
         g[8] RPF/RPO/RPH/RPW are recurrence enables for Filter/Mask/Tube/Water Tub.
         g[8] RXF/RXM/RXH/RXW are their reminder-date enables. g[4] RCF/RCM/RCH/RCW
         hold recurrence periods, while RDF/RDM/RDH/RDW hold due dates.
+        g[8] RSA is the runtime acknowledgement request, without stock storage.
         String candidates include the menu title, six message bodies and the
         shared Reminder popup heading.
         """
@@ -1268,6 +1269,7 @@ class ASFirmwarePatches(CompiledPayloadMixin):
                 'reminders_tick': 0xd2042,
                 'reminder_list_create': 0xd210c,
                 'reminder_state_update': 0x50988,
+                'reminder_ack_route': 0xaa536,
                 'reminder_menu_item': 0x3953c,
                 'reminder_menu_item_end': 0x39578,
                 'reminder_menu': 0x3a8d6,
@@ -1279,6 +1281,7 @@ class ASFirmwarePatches(CompiledPayloadMixin):
                 'reminders_tick': 0xd2322,
                 'reminder_list_create': 0xd23ec,
                 'reminder_state_update': 0x50988,
+                'reminder_ack_route': 0xaa816,
                 'reminder_menu_item': 0x3953c,
                 'reminder_menu_item_end': 0x39578,
                 'reminder_menu': 0x3a8d6,
@@ -1290,6 +1293,7 @@ class ASFirmwarePatches(CompiledPayloadMixin):
                 'reminders_tick': 0xebace,
                 'reminder_list_create': 0xebb98,
                 'reminder_state_update': 0x758b2,
+                'reminder_ack_route': 0xd2a7e,
                 'reminder_menu_item': 0x62034,
                 'reminder_menu_item_end': 0x62070,
                 'reminder_menu': 0x63058,
@@ -1301,6 +1305,7 @@ class ASFirmwarePatches(CompiledPayloadMixin):
                 'reminders_tick': 0xec2ca,
                 'reminder_list_create': 0xec394,
                 'reminder_state_update': 0x7601e,
+                'reminder_ack_route': 0xd326e,
                 'reminder_menu_item': 0x62754,
                 'reminder_menu_item_end': 0x62790,
                 'reminder_menu': 0x63778,
@@ -1312,6 +1317,7 @@ class ASFirmwarePatches(CompiledPayloadMixin):
                 'reminders_tick': 0xec1e6,
                 'reminder_list_create': 0xec2b0,
                 'reminder_state_update': 0x7601a,
+                'reminder_ack_route': 0xd3182,
                 'reminder_menu_item': 0x62754,
                 'reminder_menu_item_end': 0x62790,
                 'reminder_menu': 0x63778,
@@ -1323,6 +1329,7 @@ class ASFirmwarePatches(CompiledPayloadMixin):
                 'reminders_tick': 0xec446,
                 'reminder_list_create': 0xec510,
                 'reminder_state_update': 0x7601a,
+                'reminder_ack_route': 0xd33e2,
                 'reminder_menu_item': 0x62754,
                 'reminder_menu_item_end': 0x62790,
                 'reminder_menu': 0x63778,
@@ -1334,6 +1341,7 @@ class ASFirmwarePatches(CompiledPayloadMixin):
                 'reminders_tick': 0xec6be,
                 'reminder_list_create': 0xec788,
                 'reminder_state_update': 0x7601a,
+                'reminder_ack_route': 0xd365a,
                 'reminder_menu_item': 0x62754,
                 'reminder_menu_item_end': 0x62790,
                 'reminder_menu': 0x63778,
@@ -1372,6 +1380,15 @@ class ASFirmwarePatches(CompiledPayloadMixin):
             reminder_state_update, b'\xf0\xb5\xa3\xb0', b'\x70\x47',
             'reminder state updater', accept_existing=True)
 
+        # Popup acknowledgements route RMM -> ZRA -> RSA independently of the
+        # scheduler. Keep the shared GUI route, but use its no-target sentinel
+        # so acknowledging a popup cannot overwrite the reclaimed RSA value.
+        rmm, zra, rsa = (self.asf.resolve_var_id(var) for var in ('RMM', 'ZRA', 'RSA'))
+        self._replace_bytes_checked(
+            sites['reminder_ack_route'], struct.pack('<HHH', rmm, zra, rsa),
+            struct.pack('<HHH', rmm, zra, 0x7fff),
+            'reminder acknowledgement route', accept_existing=True)
+
         item_reclaim = reminder_menu_item + 2
         item_reclaim_size = reminder_menu_item_end - item_reclaim
         # Skip the visible Reminders row between SmartStart and Configuration.
@@ -1396,7 +1413,7 @@ class ASFirmwarePatches(CompiledPayloadMixin):
         self.custom_settings_registry_addr = reclaim
         self.custom_settings_registry_size = reclaim_size
 
-        for var in ('RPO', 'RPH', 'RPF', 'RPW', 'RXM', 'RXH', 'RXF', 'RXW'):
+        for var in ('RPO', 'RPH', 'RPF', 'RPW', 'RXM', 'RXH', 'RXF', 'RXW', 'RSA'):
             self.custom_reclaim_g8_var(var)
         for var in ('RDF', 'RDM', 'RDH', 'RDW', 'RCF', 'RCM', 'RCH', 'RCW'):
             self.custom_reclaim_g4_var(var)
