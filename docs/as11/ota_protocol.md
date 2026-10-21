@@ -147,6 +147,9 @@ identified.
 The helper refuses all-00/all-ff reads as suspicious. Treat the printed value
 as device secret material; do not paste it into logs or public docs.
 
+A key file can contain the 64 hexadecimal characters as plain text. Its filename
+and extension are arbitrary; examples use `ota-key.hex`.
+
 `python/as11_config.py devices ota-key <alias> --key-file <path>` can store the
 device's OTA key in the existing BLE credential record; see
 [as11_config devices](../tools/as11_config.md#devices).  

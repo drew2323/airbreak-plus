@@ -127,7 +127,7 @@ hex or writes it to `-o FILE`; `key-set` replaces it from `HEX64` or
 
 ```sh
 as11_nor_tool.py nor.bin key-get OTA
-as11_nor_tool.py nor.bin key-set OTA --key-file ota-key.txt -o nor-with-key.bin
+as11_nor_tool.py nor.bin key-set OTA --key-file ota-key.hex -o nor-with-key.bin
 ```
 
 Key storage and authenticated upgrades are described in the
@@ -214,8 +214,8 @@ data; treat them as private.
 Extract the OTA key from a dump and store it for a paired BLE device:
 
 ```sh
-as11_nor_tool.py nor.bin key-get OTA -o ota-key.txt
-as11_config.py devices ota-key bedroom --key-file ota-key.txt
+as11_nor_tool.py nor.bin key-get OTA -o ota-key.hex
+as11_config.py devices ota-key bedroom --key-file ota-key.hex
 ```
 
 Extract the staged upgrade container and inspect it:
