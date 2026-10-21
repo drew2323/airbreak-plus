@@ -29,6 +29,7 @@ Settings are assigned when their corresponding patch or payload is active.
 | Therapy graph | Monitoring | RXH | g[8] | CSG |
 | [Header clock](guide/features/general.md#header-clock) | Clock | RXF | g[8] | CSG |
 | [Square Wave](guide/features/squarewave.md) | Square Wave | RPF | g[8] | CSG |
+| [Fall Time](guide/features/general.md#fall-time) | Fall Time | RCW | g[4] | CSG |
 | [Backlight adaptation](guide/features/backlight.md) | Ambient Low | ATH | g[4] | NGL |
 | [Backlight adaptation](guide/features/backlight.md) | Ambient High | RCF | g[4] | CSG |
 | [Backlight adaptation](guide/features/backlight.md) | LCD / Low | LLL | g[4] | CSG |

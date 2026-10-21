@@ -11,6 +11,12 @@
 
 .text
 
+// Stock bilevel and iVAPS pressure waveforms
+NSTUB(0x08077829, therapy_variable_get)
+NSTUB(0x08089A4D, bilevel_pressure_waveform_expiration_ramp)
+NSTUB(0x08097E35, ivaps_pressure_waveform_expiration_ramp)
+NSTUB_VAR(0x2000969C, therapy_waveform_profile)
+
 // Memory and clinical menus
 NSTUB(0x0803B435, malloc)
 NSTUB(0x080408F1, memcpy_unrolled)

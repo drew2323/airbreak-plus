@@ -1062,6 +1062,22 @@ class ASFirmwarePatches(CompiledPayloadMixin):
                             (square_var, square_vid, square_label))
         self._custom_detail("squarewave toggle var_id=0x%04X at 0x%08X" % (square_vid, enable_addr))
 
+    def custom_patch_settings_fall_time(self):
+        """Expose an optional stock-waveform fall duration in Therapy."""
+        time_var = self.custom_claim_g4_var('RCW', 'fall_time_duration')
+        time_label = self.redefine_fw_string(-1, {0: 'Fall Time'}, 'fall_time_duration_label')
+        dep = self.asf.find_var_table_index(4, 'RGT')
+        units = self.asf.read_u16(self.asf.find_var('RST') + self.asf.G4_UNITS_STR)
+
+        self.redefine_g4_var(time_var, 0x0007, 0, dep, time_label,
+                             100, 900, 100, 0, 1, 50, units)
+        modes = self.mop_bitmask('S', 'ST', 'T', 'PAC', 'iVAPS')
+        self.custom_menu_add('therapy', time_var, modes, self.CUSTOM_MENU_FLAG_SHOW_UNITS)
+
+        vid = self.asf.resolve_var_id(time_var)
+        addr = self._write_payload_u16('fall_time', 'fall_time_duration_var_id', vid)
+        self._custom_detail('Fall Time: %s var_id=0x%04X at 0x%08X' % (time_var, vid, addr))
+
     def custom_patch_settings_graph(self):
         """Expose the graph/stock-gauge switch in clinical Options."""
         graph_var = self.custom_claim_g8_var('RXH', 'graph_enable')
@@ -1194,6 +1210,7 @@ class ASFirmwarePatches(CompiledPayloadMixin):
             ('asv_task_wrapper', self.custom_patch_settings_asv_task_wrapper),
             ('graph', self.custom_patch_settings_graph),
             ('squarewave', self.custom_patch_settings_squarewave),
+            ('fall_time', self.custom_patch_settings_fall_time),
             ('backlight_adapt', self.custom_patch_settings_backlight),
             ('target_rh', self.custom_patch_settings_target_rh),
             ('header_clock', self.custom_patch_settings_header_clock),
@@ -1934,6 +1951,37 @@ class ASFirmwarePatches(CompiledPayloadMixin):
             'squarewave_original_handler')
         return PatchOutcome.ok(None, *details)
 
+    def patch_fall_time(self):
+        """Retarget stock bilevel and iVAPS expiration-ramp calls."""
+        sites = {
+            'SX584-0204': ((0x8992c, 0x89bd2), (0x97c58, 0x97c68, 0x97d82)),
+            'SX584-0205': ((0x89c0c, 0x89eb2), (0x97f38, 0x97f48, 0x98062)),
+            'SX567-0401': ((0xb0422, 0xb0718), (0xabf8c, 0xabf9c, 0xac168)),
+            'SX567-0402': ((0xb0652, 0xb0948), (0xac1bc, 0xac1cc, 0xac398)),
+        }.get(self.asf.cdx_ver)
+        if sites is None:
+            return PatchOutcome.skip("unsupported CDX version %s" % self.asf.cdx_ver)
+
+        data, _, elf_path = self._load_versioned_payload('fall_time')
+        hooks = []
+        for calls, stock, wrapper in zip(sites, (
+                'bilevel_pressure_waveform_expiration_ramp',
+                'ivaps_pressure_waveform_expiration_ramp'), ('start', 'fall_time_ivaps')):
+            original = self._elf_symbol_addr(elf_path, stock) & ~1
+            target = self._elf_symbol_addr(elf_path, wrapper)
+            for site in calls:
+                instruction = self._encode_thumb_bl(site, original)
+                if self.asf.read_bytes(site, 4) != instruction:
+                    raise ValueError('patch_fall_time: unexpected expiration call bytes at 0x%X' % site)
+                hooks.append((site, instruction, target))
+
+        flash, _ = self._inject_payload('fall_time', data)
+        details = [self._payload_detail('fall_time', len(data), flash)]
+        for site, instruction, target in hooks:
+            details.append(self._patch_thumb_bl_checked(site, instruction, target, 'fall time'))
+        self.applied_payloads.add('fall_time')
+        return PatchOutcome.ok(None, *details)
+
     def patch_asv_task_wrapper(self):
         """Add runtime-controllable ASV backup-rate suppression."""
         sites = {
@@ -2554,6 +2602,8 @@ PATCH_PHASES = (
                   False, 'patch_graph_keep_screen_on'),
         PatchSpec('patch-fw-squarewave', 'Add squarewave pressure shaping.',
                   False, 'patch_squarewave'),
+        PatchSpec('patch-fall-time', 'Add adjustable stock S/ST/T/PAC/iVAPS fall time.',
+                  False, 'patch_fall_time'),
         PatchSpec('patch-fw-asv-wrapper', 'Add ASV backup-rate runtime control.',
                   False, 'patch_asv_task_wrapper'),
         PatchSpec('patch-fw-vauto-wrapper', 'Add custom VAuto pressure shaping.',

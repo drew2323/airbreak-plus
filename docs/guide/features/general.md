@@ -37,6 +37,23 @@ Standard pressure controls are expanded to the full 1.0 to 30.0 cmH2O range.
   <img src="../../images/unlocked-pressure-ranges.png" alt="Unlocked ASVAuto pressure ranges" width="240">
 </p>
 
+## Fall Time
+
+This optional patch adjusts the stock pressure transition from IPAP to EPAP
+in S, ST, T, PAC, and iVAPS. Longer times make the pressure fall more gradually.
+S/ST/T/PAC use a linear fall; iVAPS retains its curved pressure transition.
+In S, turn Easy-Breathe Off to use Fall Time.
+
+With custom settings, clinical **Therapy** contains:
+
+| Setting | UART | Values | Default |
+|---------|------|--------|---------|
+| Fall Time | RCW | 100-900 ms, step 50 ms | 100 ms |
+
+Without custom settings, the stock fall remains unchanged.
+In S/ST/T/PAC, [Square Wave](squarewave.md) supplies its own pressure
+waveform; turn it Off to use Fall Time.
+
 ## Target Humidity
 
 This patch lets users adjust humidification above or below the stock

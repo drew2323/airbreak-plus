@@ -10,7 +10,7 @@ AIR10_FIRMWARE ?= stm32.bin
 export AIR10_PATCH_ARGS
 
 AIR10_LEGACY_ENV := PATCH_CODE PATCH_VAUTO_WRAPPER PATCH_S PATCH_ASV_TASK_WRAPPER \
-	PATCH_S10_LCD PATCH_GRAPH_KEEP_SCREEN_ON PATCH_TARGET_RH FORCE_DEPRECATED
+	PATCH_FALL_TIME PATCH_S10_LCD PATCH_GRAPH_KEEP_SCREEN_ON PATCH_TARGET_RH FORCE_DEPRECATED
 $(foreach name,$(AIR10_LEGACY_ENV),$(if $(filter undefined,$(origin $(name))),,$(eval export $(name))))
 
 PATCHER_OUTPUT_ARGS := --log-file '$(abspath $(MAKE_LOG))'
@@ -32,14 +32,14 @@ ifneq ($(V),1)
 endif
 
 PAYLOAD_LAYOUT_VERSIONS := 0204 0205 0302 0305 0306 0401 0402
-PAYLOADS_0204 := target_rh mop_callback_dispatcher custom_menu_hooks uart_stream_schema backlight_adapt header_clock s10_lcd_ili9325 asv_task_wrapper
+PAYLOADS_0204 := target_rh mop_callback_dispatcher custom_menu_hooks uart_stream_schema backlight_adapt header_clock s10_lcd_ili9325 asv_task_wrapper fall_time
 PAYLOADS_0205 := $(PAYLOADS_0204)
 PAYLOADS_0302 := mop_callback_dispatcher vid_spoof graph squarewave asv_task_wrapper \
 	common_code backlight_adapt wrapper_limit_max_pdiff s10_lcd_ili9325 custom_menu_hooks \
 	uart_stream_schema language_fonts target_rh header_clock
 PAYLOADS_0305 := $(PAYLOADS_0302)
 PAYLOADS_0306 := $(PAYLOADS_0302)
-PAYLOADS_0401 := $(PAYLOADS_0302)
+PAYLOADS_0401 := $(PAYLOADS_0302) fall_time
 PAYLOADS_0402 := $(PAYLOADS_0401)
 
 payload_versions = $(foreach v,$(PAYLOAD_LAYOUT_VERSIONS),$(if $(filter $(1),$(PAYLOADS_$(v))),$(v)))
@@ -48,7 +48,7 @@ payload_bins = $(foreach v,$(call payload_versions,$(1)),$(BUILD)/$(1)_$(v).bin)
 PAYLOAD_NAMES := $(sort $(foreach v,$(PAYLOAD_LAYOUT_VERSIONS),$(PAYLOADS_$(v))))
 PAYLOAD_STAMPS := $(foreach p,$(PAYLOAD_NAMES),$(BUILD)/payload_$(p).stamp)
 S10_CODE_VERSIONS := $(call payload_versions,common_code)
-S10_STANDALONE_PAYLOADS := asv_task_wrapper backlight_adapt language_fonts uart_stream_schema vid_spoof target_rh header_clock
+S10_STANDALONE_PAYLOADS := asv_task_wrapper backlight_adapt language_fonts uart_stream_schema vid_spoof target_rh header_clock fall_time
 PAYLOAD_LAYOUT_TSVS := $(foreach v,$(PAYLOAD_LAYOUT_VERSIONS),$(BUILD)/payload_layout_$(v).tsv)
 
 BLX_PAYLOAD_VERSIONS := SX577-0200 SX585-0200
@@ -102,10 +102,10 @@ $(BUILD)/stm32-patched.bin: $(S10_PATCHER_DEPS) $(PAYLOAD_STAMPS) $(PAYLOAD_LAYO
 	$(announce_image)
 	./patch-airsense '$(AIR10_FIRMWARE)' $@ $(PATCHER_OUTPUT_ARGS)
 
-# Graph, Custom VAuto, ASV backup-rate control and Square Wave
+# Graph, Custom VAuto, ASV backup-rate control, Square Wave and Fall Time
 $(BUILD)/stm32-plus.bin: $(S10_PATCHER_DEPS) $(PAYLOAD_STAMPS) $(PAYLOAD_LAYOUT_TSVS) $(BLX_DUMP_BIN)
 	$(announce_image)
-	PATCH_CODE=1 PATCH_ASV_TASK_WRAPPER=1 PATCH_VAUTO_WRAPPER=1 PATCH_S=1 ./patch-airsense '$(AIR10_FIRMWARE)' $@ $(PATCHER_OUTPUT_ARGS)
+	PATCH_CODE=1 PATCH_ASV_TASK_WRAPPER=1 PATCH_VAUTO_WRAPPER=1 PATCH_S=1 PATCH_FALL_TIME=1 ./patch-airsense '$(AIR10_FIRMWARE)' $@ $(PATCHER_OUTPUT_ARGS)
 
 binaries: $(PAYLOAD_TARGETS)
 

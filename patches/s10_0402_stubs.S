@@ -10,6 +10,12 @@
 	name = addr
 .text
 
+// Stock bilevel and iVAPS pressure waveforms
+NSTUB(0x080A0A71, therapy_variable_get)
+NSTUB(0x080B07A1, bilevel_pressure_waveform_expiration_ramp)
+NSTUB(0x080AC449, ivaps_pressure_waveform_expiration_ramp)
+NSTUB_VAR(0x2000E7A4, therapy_waveform_profile)
+
 // GUI / LCD
 NSTUB(0x0807B5E5, GUI_SetColor)
 NSTUB(0x0807B809, LCD_FillRect)
