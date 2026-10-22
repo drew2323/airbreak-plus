@@ -167,6 +167,9 @@ The feature subrecord field numbers are not the feature IDs listed in
 temperature, ramp-time, and timezone members are converted to their displayed
 units.
 
+`TimeZoneFeature` field `1` is `TimeZoneOffsetMin`, encoded as `sint64`
+(ZigZag varint), in minutes: local time = UTC + offset.
+
 Field `5` contains the alarm profile subrecords below. Alarm fields `6` and
 `7` are preserved numerically because their setting semantics are not
 identified.

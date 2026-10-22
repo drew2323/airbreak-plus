@@ -697,7 +697,7 @@ FEATURE_PROFILE_FIELDS: dict[int, tuple[str, tuple[tuple[int, str, str], ...]]] 
         (2, "CareCheckInAvailableRaw", "raw"),
     )),
     11: ("TimeZoneFeature", (
-        (1, "TimeZoneOffsetMin", "raw"),
+        (1, "TimeZoneOffsetMin", "sint64"),
     )),
     12: ("DeviceHealthFeature", (
         (1, "SoundcheckFeatureToggleRaw", "raw"),
@@ -1490,6 +1490,8 @@ _PROFILE_VALUE_KINDS = {
 
 def _decoded_profile_value(raw: int, kind: str) -> dict:
     out = {"raw": raw}
+    if kind == "sint64":
+        out["value"] = _zigzag_decode(raw)
     scale_unit = _PROFILE_VALUE_KINDS.get(kind)
     if scale_unit is not None:
         scale, unit = scale_unit
