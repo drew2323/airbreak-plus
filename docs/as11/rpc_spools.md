@@ -210,9 +210,9 @@ field `2`; each field `2` body is one record with this shape:
 | Field | Name | Meaning |
 |-------|------|---------|
 | `1` | `InitMarker` | Record-present marker; value `1`. |
-| `2` | `PeriodStart` | Summary bucket start, UTC milliseconds. |
-| `3` | `PeriodEnd` | Summary bucket end, UTC milliseconds. |
-| `4` | `TimeZoneOffsetMin` | Local timezone offset in minutes for the bucket. |
+| `2` | `PeriodStart` | Local noon for the stored day, converted to UTC milliseconds using `TimeZoneOffsetMin`. |
+| `3` | `PeriodEnd` | `PeriodStart` plus 86400000 milliseconds. |
+| `4` | `TimeZoneOffsetMin` | `sint64` (ZigZag varint). Current timezone offset in minutes at serialization, not the historical offset; local time = UTC + offset. |
 | `5` | `DurationMin` | Therapy duration in minutes. |
 | `6` | `SessionDurationEntries` | Repeated session-duration subrecords. |
 | `7` | `AHI` | Apnea/hypopnea index. |
@@ -252,6 +252,10 @@ field `2`; each field `2` body is one record with this shape:
 | `41` | `HeartRate` | Percentile metric subrecord. |
 | `42` | `AlveolarMinuteVentilation` | Alveolar minute ventilation percentile metric. |
 | `43` | `SmdSmtTimestamp` | Optional timestamp encoded as an `SMD`/`SMT` date/time pair. |
+
+Changing the timezone changes the UTC bucket boundaries returned for existing
+records; the stored day key remains unchanged. For UTC-5, field `4` contains
+`20 D7 04`: field tag `20`, followed by ZigZag-encoded `-300` (varint `599`).
 
 Field `6` contains repeated field `1` subrecords:
 

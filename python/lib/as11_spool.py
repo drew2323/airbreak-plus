@@ -2172,7 +2172,9 @@ def _decode_summary_records(data: bytes) -> list[dict]:
                 raw = int(value)
                 decoded = {"raw": raw}
                 scale = _SUMMARY_SCALAR_SCALES.get(field)
-                if scale is not None:
+                if field == 4:
+                    decoded["value"] = _zigzag_decode(raw)
+                elif scale is not None:
                     decoded["value"] = raw * scale
                 if field in _SUMMARY_TIMESTAMP_FIELDS:
                     decoded["value"] = _fmt_utc_ms(raw)
