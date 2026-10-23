@@ -82,6 +82,7 @@ options belong to commands that contact a device.
 | `--addr ADDRESS` | Compatibility shortcut for `-d ble:ADDRESS` | None |
 | `-p`, `--port PORT` | Compatibility shortcut for `-d can:PORT` | None |
 | `--can-flavour NAME` | `slcan`, `socketcan`, or `waveshare`; `canable` aliases `slcan` | Inferred from target |
+| `--can-frame-interval-ms MS` | CAN frame transmit interval in milliseconds | Legacy SLCAN: `0.25`; Elmue/SocketCAN: `0`; Waveshare: `2` |
 | `--timeout SECONDS` | RPC response timeout | `5` |
 | `-v`, `--verbose` | Transfer and informational logging | Off |
 | `--debug` | Packet-level logging | Off |

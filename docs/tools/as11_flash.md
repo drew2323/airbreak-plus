@@ -78,6 +78,7 @@ Device options are accepted before or after the command.
 | `--addr ADDRESS` | Compatibility shortcut for `-d ble:ADDRESS` | None |
 | `-p`, `--port PORT` | Compatibility shortcut for `-d can:PORT` | None |
 | `--can-flavour NAME` | `slcan`, `socketcan`, or `waveshare`; `canable` aliases `slcan` | Inferred from target |
+| `--can-frame-interval-ms MS` | CAN frame transmit interval in milliseconds | Legacy SLCAN: `0.25`; Elmue/SocketCAN: `0`; Waveshare: `2` |
 | `--debug` | Transport packet logging | Off |
 | `-h`, `--help` | Show help | -- |
 

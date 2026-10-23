@@ -35,7 +35,7 @@ SERIAL_BAUD_CANDIDATES = (
 )
 DEFAULT_TIMEOUT = 5.0
 FRAME_BATCH_SIZE = 8
-FRAME_BATCH_INTERVAL = 0.0
+LEGACY_FRAME_INTERVAL = 0.00025
 
 ELMUE_BITRATE_CODES = {
     10_000: "0",
@@ -214,7 +214,7 @@ class _CanableConfig:
     serial_bauds: tuple[int, ...] = SERIAL_BAUD_CANDIDATES
     tx_id: int = DEFAULT_RPC_TX_ID
     rx_id: int = DEFAULT_RPC_RX_ID
-    frame_interval: float = 0.0
+    frame_interval: float | None = None
     reset_buffers: bool = True
     dtr: bool | None = None
     rts: bool | None = None
@@ -258,6 +258,7 @@ class _CanableSlcan:
         self._rx_frames: deque[CanFrame] = deque()
         self._version_text: str | None = None
         self._protocol = "unknown"
+        self._next_batch_time = 0.0
         if open_delay:
             time.sleep(open_delay)
         if reset_buffers:
@@ -457,17 +458,41 @@ class _CanableSlcan:
         self._command_no_feedback(cmd, settle=0.0)
 
     def send_frames_batch(self, can_id: int, frames: list[bytes], *,
-                          extended: bool = False) -> None:
+                          extended: bool = False, frame_interval: float | None = None) -> None:
+        interval = frame_interval
+        if interval is None:
+            interval = 0.0 if self._protocol == "elmue" else LEGACY_FRAME_INTERVAL
+        if self._protocol == "elmue":
+            for frame in frames:
+                delay = self._next_batch_time - time.monotonic()
+                if delay > 0:
+                    time.sleep(delay)
+                deadline = time.monotonic() + 1.0
+                while True:
+                    try:
+                        self.send_frame(can_id, frame, extended=extended)
+                        break
+                    except CanTxBufferFull:
+                        # Only an explicit rejection is safe to retry in place.
+                        if time.monotonic() >= deadline:
+                            raise
+                        time.sleep(0.001)
+                self._next_batch_time = time.monotonic() + interval
+            return
         for offset in range(0, len(frames), FRAME_BATCH_SIZE):
             batch = frames[offset:offset + FRAME_BATCH_SIZE]
             payload = b"".join(
                 _format_slcan_frame(can_id, frame, extended=extended, remote=False).encode("ascii") + b"\r"
                 for frame in batch
             )
+            delay = self._next_batch_time - time.monotonic()
+            if delay > 0:
+                time.sleep(delay)
+            started = time.monotonic()
             self.ser.write(payload)
             self.ser.flush()
-            if FRAME_BATCH_INTERVAL > 0 and offset + FRAME_BATCH_SIZE < len(frames):
-                time.sleep(FRAME_BATCH_INTERVAL)
+            # Keep the pacing budget across datagrams, without accumulating idle credit.
+            self._next_batch_time = started + len(batch) * interval
 
 
 class CanCanableTransport:
@@ -478,7 +503,7 @@ class CanCanableTransport:
     def __init__(self, port: str, *, bitrate: int = 1_000_000,
                  mode: str = "normal", serial_bauds: tuple[int, ...] = SERIAL_BAUD_CANDIDATES,
                  tx_id: int = DEFAULT_RPC_TX_ID, rx_id: int = DEFAULT_RPC_RX_ID,
-                 frame_interval: float = 0.0, reset_buffers: bool = True,
+                 frame_interval: float | None = None, reset_buffers: bool = True,
                  dtr: bool | None = None, rts: bool | None = None,
                  debug: bool = False) -> None:
         self._cfg = _CanableConfig(
@@ -513,7 +538,7 @@ class CanCanableTransport:
             serial_bauds=serial_bauds,
             tx_id=getattr(args, "tx_id", DEFAULT_RPC_TX_ID),
             rx_id=getattr(args, "rx_id", DEFAULT_RPC_RX_ID),
-            frame_interval=getattr(args, "frame_interval", 0.0),
+            frame_interval=getattr(args, "frame_interval", None),
             reset_buffers=not getattr(args, "no_reset_buffers", False),
             dtr=getattr(args, "dtr", None),
             rts=getattr(args, "rts", None),
@@ -594,18 +619,11 @@ class CanCanableTransport:
 
     def send_payload(self, payload: bytes) -> None:
         frames = CanDatagramCodec.encode(payload)
-        if self._cfg.frame_interval <= 0:
-            self.dev.send_frames_batch(self._cfg.tx_id, frames, extended=False)
-            if self._cfg.debug:
-                for frame in frames:
-                    _log_can_rpc.debug("TX 0x%03X %s", self._cfg.tx_id, hex_bytes(frame))
-            return
-        for idx, frame in enumerate(frames):
-            self.dev.send_frame(self._cfg.tx_id, frame, extended=False)
-            if self._cfg.debug:
+        self.dev.send_frames_batch(self._cfg.tx_id, frames, extended=False,
+                                   frame_interval=self._cfg.frame_interval)
+        if self._cfg.debug:
+            for frame in frames:
                 _log_can_rpc.debug("TX 0x%03X %s", self._cfg.tx_id, hex_bytes(frame))
-            if self._cfg.frame_interval > 0 and idx + 1 < len(frames):
-                time.sleep(self._cfg.frame_interval)
 
     def recv_payload(self, *, timeout: float) -> bytes:
         deadline = time.monotonic() + timeout

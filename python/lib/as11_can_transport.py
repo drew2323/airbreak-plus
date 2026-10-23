@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 import os
 import re
 from importlib import import_module
@@ -20,6 +21,13 @@ CAN_FLAVOUR_ALIASES = {
 }
 
 
+def _frame_interval_ms(value: str) -> float:
+    interval = float(value)
+    if not math.isfinite(interval) or interval < 0:
+        raise argparse.ArgumentTypeError("frame interval must be finite and non-negative")
+    return interval / 1000
+
+
 def add_args(p: argparse.ArgumentParser, *, show_help: bool = True) -> None:
     suppr = argparse.SUPPRESS
     g = p.add_argument_group("CAN adapter (ignored unless -d can:...)")
@@ -27,6 +35,11 @@ def add_args(p: argparse.ArgumentParser, *, show_help: bool = True) -> None:
                    choices=tuple(CAN_TRANSPORTS),
                    help=("CAN adapter protocol. By default this is inferred "
                          "from can:<target>") if show_help else suppr)
+    g.add_argument("--can-frame-interval-ms", dest="frame_interval", type=_frame_interval_ms,
+                   default=suppr, metavar="MS",
+                   help=("CAN RPC transmit pacing in milliseconds; default: legacy SLCAN 0.25, "
+                         "Elmue/SocketCAN 0, Waveshare 2. "
+                         "Elmue feedback remains enabled at 0") if show_help else suppr)
 
 
 def split_flavour_target(target: str) -> tuple[str | None, str]:
