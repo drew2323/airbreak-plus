@@ -701,46 +701,9 @@ class ASFirmware(object):
         
         return address
         
-    def patch_image(self, structaddr, palletaddr, pixeladdr, image):
-        self.write_u16(structaddr, image.meta_xsize)
-        self.write_u16(structaddr + 2, image.meta_ysize)
-        self.write_u16(structaddr + 4, image.meta_bytesper)
-
-        # We leave bitsperpixel alone - should be '0'
-        self.write_u32(structaddr + 8, pixeladdr + self.FLASH_BASE)
-        self.write_u32(structaddr + 12, palletaddr + self.FLASH_BASE)
-
-        #Pointer to function for drawing/decoding (not changed)
-        #self.fw[(structaddr + 16):(structaddr + 24)]
-
-        self.patch(image.pixels, pixeladdr)
-
-        self.write_u32(palletaddr, image.pallete_numberentries)
-        self.write_u32(palletaddr + 4, image.pallete_numbertransp)
-        self.write_u32(palletaddr + 8, palletaddr + 16 + self.FLASH_BASE)
-        for i, color in enumerate(image.pallete):
-            self.write_u32(palletaddr + 16 + i * 4, color)
-
     def write_output(self, filename, overwrite=False):
         if os.path.exists(filename) and not overwrite:
             raise IOError("File %s exists already." % filename)
     
         with open(filename, "wb") as f:
             f.write(bytes(self.fw))
-        
-    def prepare_bin(self, filename):
-        """Uses .lst file to find symbols - could use ELF too put requires additional dependancy"""
-        
-        with open(filename + ".lst", "rb") as f:
-            lst = f.read()
-        with open(filename + ".bin", "rb") as f:
-            data = f.read()
-        
-        #Find 'start' symbol we assume each file uses
-        addr_offset = re.search(rb'\.text:[0-F]{8} start', lst, re.IGNORECASE).group(0)
-        
-        #addr should look like this now - .text:00000000 start        
-        addr_offset = addr_offset.split(b':')[1].split(b' ')[0]
-        addr_offset = int(addr_offset, 16)
-        
-        return addr_offset, data

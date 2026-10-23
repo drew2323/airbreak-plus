@@ -1794,68 +1794,6 @@ class ASFirmwarePatches(CompiledPayloadMixin):
             self.asf.write_u8(self.asf.find_var(name) + self.asf.G8_DEFAULT, value)
         return PatchOutcome.ok("Updated defaults for %d vars" % len(defaults))
 
-    def patch_logos(self):
-
-        #Change these to adjust logos, rest should work automatically.
-        #NB - be sure of settings when saving file:
-        #     'text' was exported with `Compressed, RLE4`
-        #     'logo' was exported with `Compressed, RLE8`
-        import image_conversion_example.example1_umbrella_logo_c as logo
-        import image_conversion_example.example1_umbrella_text_c as text
-        
-        # Find somewhere to stash our stuff in the flash memory
-        # NOTE: Pallet is in 32-bit, and need room for struct stuff around pallete
-        pallete_addr = self.asf.find_flash_room(len(logo.pallete*4)+32, reserve=True) 
-        pixels_addr = self.asf.find_flash_room(len(logo.pixels), reserve=True)
-        
-        # Find the location of the original wave
-        setting_loc = self.asf.find_bytes([0xb8, 0x00, 0x54, 0x00, 0xb8, 0x00, 0x00, 0x00])
-        
-        self.asf.patch_image(setting_loc, pallete_addr, pixels_addr, logo)
-        
-        # Find somewhere to stash our stuff in the flash memory
-        # NOTE: Pallet is in 32-bit, and need room for struct stuff around pallete
-        pallete_addr = self.asf.find_flash_room(len(text.pallete*4)+32, reserve=True) 
-        pixels_addr = self.asf.find_flash_room(len(text.pixels), reserve=True)
-        
-        # Find the location of the original text
-        setting_loc = self.asf.find_bytes([0xB8, 0x00, 0x32, 0x00, 0x5c, 0x00, 0x00])
-        
-        self.asf.patch_image(setting_loc, pallete_addr, pixels_addr, text)
-        return PatchOutcome.ok()
-
-    def patch_uart3_monitor(self):
-
-        irq_offset, irq_bin = self.asf.prepare_bin("../serial_monitor/monitor_irq")
-        
-        # Need to rebuild if location changes - for now just fix it, check we've got room
-        # before doing it.
-        #
-        # If following fails, these two lines will figure out where there is room again
-        # irq_location = asf.find_flash_room(len(data)*2)
-        # print("Suggest to place at %x"%irq_location)
-        irq_location = 0xC600
-        self.asf.patch(irq_bin, irq_location, checkempty=True)
-        
-        init_offset, init_bin = self.asf.prepare_bin("../serial_monitor/monitor_init")
-        if init_offset != 0:
-            raise ValueError("Nonsense - no other function!?")
-        
-        #Init location
-        init_location = self.asf.find_bytes([0x70, 0xb5, 0x84, 0xb0, 0x04, 0x46, 00, 0xf0])
-        if (init_location != 0xC339A):
-            raise ValueError("oops.... init function location is fixed in FW build")
-        self.asf.patch(init_bin, init_location, clobber=True)
-        
-        #Entry is not at start of file sometimes in this file?
-        irq_location += irq_offset
-        
-        # IRQ vector - at fixed location 0x080402DC so don't need to worry about
-        # this moving. Address needs to be +1 for normal code jump location.
-        irq_location_packed = struct.pack("<I", 0x08000000 + irq_location + 1)
-        self.asf.patch(irq_location_packed, 0x402dc, clobber=True)
-        return PatchOutcome.ok(None, "USART3 monitor IRQ entry offset: 0x%X" % irq_offset)
-        
     def patch_common_code(self):
         """Inject common_code shared library (required by graph, squarewave, etc.)"""
         if not self._supports_compiled_payloads():
@@ -2349,15 +2287,6 @@ class ASFirmwarePatches(CompiledPayloadMixin):
             self._hook_detail('backlight update call',
                               self.asf.FLASH_BASE + hook_off, start))
 
-    def patch_breath(self):
-        """Add breath routine to allow full control"""
-        with open("../breath.bin", "rb") as f:
-            fw = f.read()
-        
-        self.asf.patch(fw, 0xBB734, clobber=True)
-        return PatchOutcome.ok()
-
-
     def patch_vid_spoof(self):
         """Set VID from therapy mode, using a regional variant where known."""
         if not self._supports_compiled_payloads():
@@ -2587,9 +2516,6 @@ PATCH_PHASES = (
                   True, 'patch_past_date'),
         PatchSpec('patch-motor-nagscreen', 'Remove the "Motor life exceeded" nag screen.',
                   True, 'motor_nagscreen'),
-        PatchSpec('patch-logos', 'Change start-up logos.',
-                  False, 'patch_logos',
-                  'requires unmaintained external logo assets'),
     )),
 
     ('Therapy modifications', (
@@ -2608,9 +2534,6 @@ PATCH_PHASES = (
                   False, 'patch_asv_task_wrapper'),
         PatchSpec('patch-fw-vauto-wrapper', 'Add custom VAuto pressure shaping.',
                   False, 'patch_wrapper_limit_max_pdiff'),
-        PatchSpec('patch-fw-breath', 'Add direct pressure-control firmware.',
-                  False, 'patch_breath',
-                  'requires an external breath.bin built for one fixed firmware address'),
     )),
 
     ('Custom settings integration', (
@@ -2634,9 +2557,6 @@ PATCH_PHASES = (
                   True, 'patch_blx_dump'),
         PatchSpec('patch-fw-lcd', 'Add the universal ILI9325/ILI9328 LCD driver.',
                   False, 'patch_lcd_ili9325'),
-        PatchSpec('patch-fw-serialmonitor', 'Add a monitor on the USART3 accessory port.',
-                  False, 'patch_uart3_monitor',
-                  'requires external monitor binaries and fixed firmware addresses'),
     )),
 )
 
