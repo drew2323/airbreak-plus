@@ -5,32 +5,7 @@ controls for Air11 feature patches. Storage, descriptor changes, menu rows,
 and payload bindings are independent parts of the framework.
 
 `patch-custom-settings` enables the finalization pass. When no active feature
-requests a custom setting, the pass is skipped and stock firmware remains
-unchanged.
-
-## Current Assignments
-
-| Feature | Setting | Backing field | Table | Section | Visible in | Default |
-|---------|---------|---------------|-------|---------|------------|---------|
-| [ASV Backup Rate](../guide/as11/features.md#asv-backup-rate) | Backup Rate | `RIF` / `ReminderFilterEnable` | g[5] | Therapy | ASV, ASVAuto | On |
-| Header clock | Clock | `RIM` / `ReminderMaskEnable` | g[5] | Configuration | all modes | Off |
-| Therapy-screen style | Therapy View | `TSS` | g[5] | Configuration | all modes | Simple |
-
-For Backup Rate, `On` preserves stock ASV behavior. `Off` suppresses backup
-breaths while leaving the stock no-breathing detector active.
-
-For Header clock, `On` shows local time in the dashboard and therapy-screen
-headers. `Off` preserves the stock header labels.
-
-`patch-therapy-screen-style` enables the native TSS options and RPC writes,
-and adds TSS to HST. With custom settings, APPX 8.4.0 and later provide the
-Configuration selector below. Earlier versions retain RPC control and storage.
-
-| Value | RPC symbol | GUI label |
-|------:|------------|-----------|
-| 0 | `Dots` | Simple |
-| 1 | `PressureBar` | Pressure |
-| 2 | `FlowWave` | Flow |
+registers settings, menu rows, bindings, or reclaim requests, the pass is skipped.
 
 ## Application Sequence
 
@@ -38,7 +13,7 @@ Feature patches register their requirements while the normal patch list is
 processed. Afterward, the custom settings finalizer:
 
 1. resolves every referenced DataItem by short tag or long name
-2. activates each reclaim provider used by a claimed field
+2. activates each requested reclaim provider, including those used by claimed fields
 3. loads the shared menu payload when rows must be added or removed
 4. applies requested descriptor-field changes
 5. writes resolved variable IDs into feature payload ABI slots
@@ -56,14 +31,16 @@ is allocated and written.
 
 ## Optional Integration
 
-Custom settings configure feature payloads but are not their runtime
-dependency. A configurable payload reserves a 16-bit variable-ID slot with the
-value `0xFFFF`. The finalizer replaces it with the claimed DataItem ID.
+For optional integration, a configurable payload reserves a 16-bit variable-ID
+slot with the value `0xFFFF`. The finalizer replaces it with the claimed
+DataItem ID.
 
 When `patch-custom-settings` is disabled, no field is reclaimed, no menu row is
 added, and the slot remains `0xFFFF`. The feature payload must recognize that
-sentinel and use its standalone behavior. The ASV backup-rate payload treats
-it as backup rate disabled; the header-clock payload displays the clock.
+sentinel and use its standalone behavior.
+
+A feature that requires reclaimed resources must skip installation when
+`patch-custom-settings` is disabled.
 
 ## Persistence
 
@@ -110,6 +87,13 @@ The current provider reclaims the persistent replacement-reminder profile:
 | g[5] | `RDF`, `RDM`, `RDT`, `RDH` | reminder periods |
 | g[2] | `RTF`, `RTM`, `RTT`, `RTH` | reminder dates |
 
+A feature can request reclaim without claiming a DataItem. This requires
+`patch-custom-settings`:
+
+```python
+self.custom_settings_reclaim("reminders")
+```
+
 Features claim exact fields rather than receiving the next free field by type.
 A field cannot be claimed by two features, and an unknown field is rejected.
 
@@ -142,12 +126,6 @@ Menu entries use existing firmware GUI text IDs. Text IDs move between APPX
 versions, so the feature owns the per-version label mapping. The framework
 does not currently allocate new localized strings or rewrite the Markov text
 tables.
-
-The ASV backup-rate feature uses the stock localized `Backup Rate` text in each
-supported application version.
-
-The header-clock feature draws `Clock` for its menu row. That label is not
-localized.
 
 For an enum selector, a feature can associate raw values with existing GUI
 text IDs through `custom_enum_labels(setting, {raw_value: text_id, ...})`.
@@ -244,6 +222,20 @@ A feature using reclaimed persistence should:
 A feature may omit the claim when it only displays an existing DataItem. It may
 also omit the menu row when the reclaimed field is controlled entirely by the
 payload or another interface.
+
+For example, the ASV backup-rate integration claims an enum, sets its default,
+adds a mode-dependent row, and binds the payload's variable-ID slot:
+
+```python
+setting = self.custom_setting_claim("RIF", "patch-asv-backup-rate", custom_name="ASVBackupRateEnable")
+self.custom_setting_define(setting, default_option=1)
+self.custom_menu_add("therapy", setting, version["label_id"],
+                     self.therapy_mode_mask("ASV", "ASVAuto"), "text_value")
+self.custom_setting_bind(setting, backup_rate_var_slot)
+```
+
+`version["label_id"]` comes from the feature's per-version mapping;
+`backup_rate_var_slot` is the address of its 16-bit ABI slot in the payload.
 
 For an existing enum such as TSS, the feature registers persistence and menu
 integration without claiming a reminder field:

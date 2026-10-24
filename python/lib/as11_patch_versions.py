@@ -414,6 +414,8 @@ AS11_PATCH_VERSIONS = {
                     "row_call": (0x0805E2F2, 0x0806A0EA),
                     "row_label": (0x0805E2EE, "40f23111"),
                     "row_store": (0x0805E2FA, "cbf80402"),
+                    "row_build_start": 0x0805E2C2,
+                    "row_build_end": 0x0805E2FE,
                     "scheduler_call": (0x08092D3A, 0x080A0EF8),
                 },
             },
@@ -421,6 +423,15 @@ AS11_PATCH_VERSIONS = {
         "asv_backup_rate": {
             "vtable_slot": 0x081AF034,
             "label_id": 0x00F1,
+        },
+        "flow_wave": {
+            "gui_update_call": 0x08092D6C,
+            "page_build_start": 0x08062DEE,
+            "page_build_end": 0x0806301A,
+            "page_store": 0x08063016,
+            "tss_switch_pointer": 0x08059208,
+            "therapy_page_state_call": 0x080AFD4C,
+            "therapy_page_policy_call": 0x080A1D2C,
         },
         "screen_keep_awake": {
             "touch_report_vtable_slot": 0x081AC774,
@@ -524,6 +535,9 @@ AS11_PATCH_VERSIONS = {
                     "row_call": (0x0805E836, 0x0806A746),
                     "row_label": (0x0805E832, "40f23311"),
                     "row_store": (0x0805E83E, "cbf80402"),
+                    # Omit both navigation-action and menu-row allocations.
+                    "row_build_start": 0x0805E806,
+                    "row_build_end": 0x0805E842,
                     "scheduler_call": (0x08093874, 0x080A1AC4),
                 },
             },
@@ -535,6 +549,17 @@ AS11_PATCH_VERSIONS = {
         "therapy_screen_style": {
             "label_id": 0x00B5,
             "option_labels": (0x01FE, 0x009D, 0x0212),
+        },
+        "flow_wave": {
+            "gui_update_call": 0x080938A6,
+            # Replace construction of the Reminders page and all its children.
+            "page_build_start": 0x0806333E,
+            "page_build_end": 0x0806356A,
+            "page_store": 0x08063566,
+            "tss_switch_pointer": 0x080596F4,
+            # Native therapy-page classification: state publication and UI policy.
+            "therapy_page_state_call": 0x080B0ED0,
+            "therapy_page_policy_call": 0x080A28F4,
         },
     },
 }

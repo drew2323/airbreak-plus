@@ -30,6 +30,9 @@
 # Optional graphics beside Trigger/Cycle sensitivity choices.
 # --patch-sensitivity-split-screen y
 
+# Live flow and requested-pressure graph in Therapy View > Flow (8.6.0).
+# --patch-flow-wave n
+
 # Retry unbonded BLE pulse oximeters without encryption after pairing fails.
 # --patch-ble-oxi-fallback n
 

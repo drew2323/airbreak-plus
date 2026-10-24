@@ -84,6 +84,70 @@ extern void thunk_gui_timer_handle_reschedule_with_optional_delay(
     unsigned int delay_ms);
 extern void gui_owned_object_invalidate(void *object);
 
+/* Geometry accessors return global coordinates; paint calls use widget-local ones. */
+extern void GuiTreatmentScreenSinglePressure_paint(void *screen);
+extern void GuiTreatmentScreen_timer_callback(void *screen, void *timer);
+extern void GuiTreatmentScreen_clear_background(void *screen);
+extern void GuiScroller_paint(void *scroller);
+extern void GuiTreatmentDots_paint(void *dots);
+extern void *gui_widget_parent(void *widget);
+extern unsigned int gui_window_parent_handle(unsigned int window);
+extern int gui_widget_is_visible(void *widget);
+extern int gui_widget_width(void *widget);
+extern int gui_widget_height(void *widget);
+extern int gui_widget_x(void *widget);
+extern int gui_widget_y(void *widget);
+extern void gui_widget_invalidate_rect(void *widget, int x0, int y0, int x1, int y1);
+extern unsigned int gui_time_milliseconds(void);
+extern void stopwatch_reset(void *stopwatch, unsigned int elapsed);
+
+/* Native 112-byte drawing context; clip bounds are inclusive screen coordinates. */
+typedef struct {
+    unsigned char prefix[8];
+    short clip_left, clip_top, clip_right, clip_bottom;
+    unsigned char state[0x3c];
+    int origin_x, origin_y;
+    unsigned char tail[0x1c];
+} gui_render_context_t;
+extern void gui_render_context_snapshot(gui_render_context_t *context);
+extern void user_interface_update_gui_state_and_cache(void *context);
+
+/* Native therapy widgets. Constructors retain child arrays and scroll states. */
+extern void *GuiTherapyListItem_ctor(void *item, unsigned int height);
+extern void *GuiTherapySummaryRow_ctor(void *item, unsigned int height, unsigned int first, unsigned int second, unsigned int label);
+extern void *GuiTherapyValueRow_ctor(void *item, unsigned int var_id, unsigned int label, unsigned int unit, int scale);
+extern void *GuiTherapyPairRow_ctor(void *item, unsigned int first, unsigned int second,
+    unsigned int label, unsigned int title, unsigned int activity, unsigned int empty,
+    unsigned int unit, int scale, int index, void *controller);
+extern void *GuiTherapyDoubleNodeAdapter_ctor(void *adapter, unsigned int first, unsigned int index, unsigned int second);
+extern void *GuiTherapyAdapterRow_ctor(void *item, void *adapter, unsigned int label, unsigned int unit);
+extern void *GuiTherapyRowGroup_ctor(void *group, void **items, unsigned int count, unsigned int visible_rows);
+extern void *GuiTherapyScrollbar_ctor(void *bar, unsigned int width, unsigned int gap, unsigned int inset, unsigned int padding);
+extern void GuiScrollState_ctor(void *state);
+extern void *GuiTreatmentScreen_ctor(void *screen, void *parent, void *root, unsigned int label,
+    void *scroller, unsigned int context, unsigned int period);
+extern void GuiScroller_update_items(void *scroller);
+extern void GuiPageAction_ctor(void *action, const unsigned char *page);
+extern void GuiSwitchAction_add(void *action, unsigned int value, void *target);
+extern int GuiMenuCentre_is_therapy_page(const unsigned char *page);
+
+typedef struct {
+    unsigned int count;
+    unsigned char transparent;
+    unsigned char reserved[3];
+    const unsigned int *colors;
+} gui_palette_t;
+
+typedef struct {
+    unsigned short width, height, stride, bits_per_pixel;
+    const unsigned char *pixels;
+    const gui_palette_t *palette;
+    const void *methods;
+} gui_bitmap_t;
+
+/* A null methods pointer selects packed pixels with native origin/clipping. */
+extern void gui_paint_draw_bitmap(const gui_bitmap_t *bitmap, int x, int y);
+
 /* Native touch and backlight entry points used by the keep-awake gesture. */
 extern void touch_screen_controller_process_report(void *controller);
 extern void touch_screen_controller_discard_all_reports(void *controller);

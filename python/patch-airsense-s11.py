@@ -331,6 +331,7 @@ AS11_AIRBREAK_INFO_PAYLOAD = "as11_airbreak_info"
 AS11_CELLULAR_DOWNLOAD_PAYLOAD = "as11_cellular_download"
 AS11_SCREEN_KEEP_AWAKE_PAYLOAD = "as11_screen_keep_awake"
 AS11_SCROLL_ANIMATION_PAYLOAD = "as11_scroll_animation"
+AS11_FLOW_WAVE_PAYLOAD = "as11_flow_wave"
 AS11_BLE_OXI_FALLBACK_PAYLOAD = "as11_ble_oxi_fallback"
 
 
@@ -1052,6 +1053,7 @@ class S11FirmwarePatches(CompiledPayloadMixin):
         self.rpc_dispatcher_outcome = None
         self.custom_settings_enabled = False
         self.custom_setting_claims = {}
+        self.custom_reclaim_pools = set()
         self.custom_menu_entries = []
         self.custom_enum_label_requests = {}
         self.custom_setting_bindings = []
@@ -1414,7 +1416,14 @@ class S11FirmwarePatches(CompiledPayloadMixin):
             "custom_name": custom_name,
             "definition": None,
         }
+        self.custom_settings_reclaim(pool)
         return name
+
+    def custom_settings_reclaim(self, pool):
+        """Detach a stock feature, also when only its UI resources are needed."""
+        if pool not in self.CUSTOM_SETTING_RECLAIM_POOLS:
+            raise ValueError("custom settings: unknown reclaim pool %s" % pool)
+        self.custom_reclaim_pools.add(pool)
 
     def custom_setting_define(self, setting, **fields):
         """Define descriptor fields for a claimed DataItem."""
@@ -1504,10 +1513,23 @@ class S11FirmwarePatches(CompiledPayloadMixin):
                 "custom settings: reminder scheduler call does not match"
             )
 
+        # bl reminder scheduler -> nop; nop
+        patches = [(scheduler_off, b"\x00\xBF\x00\xBF")]
+        if "row_build_start" in layout:
+            row_call, row_ctor = layout["row_call"]
+            store_addr, store_hex = layout["row_store"]
+            if (self.asf.read_thumb2_bl_target(self.asf.ptr_to_off(row_call)) != row_ctor or
+                    bytes(self.asf.fw[self.asf.ptr_to_off(store_addr):self.asf.ptr_to_off(store_addr) + 4]) != bytes.fromhex(store_hex)):
+                raise ValueError("custom settings: Reminders navigation row does not match")
+            start = self.asf.ptr_to_off(layout["row_build_start"])
+            # alloc/construct action + row -> movs r0,#0; str r0,[r11,#row]; b.w end
+            replacement = b"\x00\x20" + bytes.fromhex(store_hex)
+            replacement += self.asf.thumb2_bw_bytes(start + 6, layout["row_build_end"])
+            patches.append((start, replacement))
+
         return {
             "removed_rows": (layout["row_index"],),
-            # bl reminder scheduler -> nop; nop
-            "patches": ((scheduler_off, b"\x00\xBF\x00\xBF"),),
+            "patches": patches,
         }
 
     def finalize_custom_settings(self):
@@ -1515,7 +1537,7 @@ class S11FirmwarePatches(CompiledPayloadMixin):
         if not self.custom_settings_enabled:
             return PatchOutcome.skip("custom settings disabled")
         if not (self.custom_setting_claims or self.custom_menu_entries or
-                self.custom_setting_bindings):
+                self.custom_setting_bindings or self.custom_reclaim_pools):
             return PatchOutcome.skip("no active features")
 
         ver = self._payload_version_key()
@@ -1543,9 +1565,7 @@ class S11FirmwarePatches(CompiledPayloadMixin):
         # DataItems were claimed.
         removed_rows = []
         stock_patches = []
-        pools = sorted({
-            claim["pool"] for claim in self.custom_setting_claims.values()
-        })
+        pools = sorted(self.custom_reclaim_pools)
         layout = (
             self._patch_version_data("custom_settings", ver)
             if pools or self.custom_menu_entries else None
@@ -2854,6 +2874,78 @@ class S11FirmwarePatches(CompiledPayloadMixin):
         self.asf.patch(branch, addr=site)
         return PatchOutcome.ok("1.5x scroll step; native timer interval")
 
+    def flow_wave(self):
+        """Draw flow and mask pressure on the reclaimed Reminders page."""
+        if not self.custom_settings_enabled:
+            return PatchOutcome.skip("requires patch-custom-settings")
+        ver = self._payload_version_key()
+        anchors = AS11_PATCH_VERSIONS.get(ver, {}).get("flow_wave")
+        if anchors is None:
+            return PatchOutcome.skip("Flow view payload not ported to this APPX")
+        data, _ = self._load_versioned_bin(AS11_FLOW_WAVE_PAYLOAD)
+        if data is None:
+            return PatchOutcome.skip("compiled payload unavailable")
+        reclaim_data, _ = self._load_versioned_bin(AS11_CUSTOM_SETTINGS_PAYLOAD)
+        if reclaim_data is None:
+            return PatchOutcome.skip("Reminders reclaim requires the custom-settings bridge")
+
+        elf_path = self._versioned_artifact_path(AS11_FLOW_WAVE_PAYLOAD, "elf", ver)
+        ctor = self._elf_symbol_addr(elf_path, "start")
+        layout_addr = self._elf_symbol_addr(elf_path, "flow_layout")
+        gui_call = self.asf.ptr_to_off(anchors["gui_update_call"])
+        stock_update = self._elf_symbol_addr(elf_path, "user_interface_update_gui_state_and_cache")
+        gui_wrapper = self._elf_symbol_addr(elf_path, "flow_wave_update_gui")
+        therapy_predicate = self._elf_symbol_addr(elf_path, "GuiMenuCentre_is_therapy_page")
+        therapy_wrapper = self._elf_symbol_addr(elf_path, "flow_wave_is_therapy_page")
+        therapy_calls = [self.asf.ptr_to_off(anchors[name]) for name in ("therapy_page_state_call", "therapy_page_policy_call")]
+        if self.asf.read_thumb2_bl_target(gui_call) != stock_update:
+            raise ValueError("flow_wave: GUI update call does not match")
+        if any(self.asf.read_thumb2_bl_target(off) != therapy_predicate for off in therapy_calls):
+            raise ValueError("flow_wave: therapy-page classification call does not match")
+
+        page_start = self.asf.ptr_to_off(anchors["page_build_start"])
+        page_store = self.asf.ptr_to_off(anchors["page_store"])
+        # Native block: movs r7,#4; movs r0,#0x50 ... str.w r0,[r9,#offset].
+        if (bytes(self.asf.fw[page_start:page_start + 4]) != bytes.fromhex("04275020") or
+                bytes(self.asf.fw[page_store:page_store + 2]) != bytes.fromhex("c9f8")):
+            raise ValueError("flow_wave: Reminders page construction does not match")
+        # The final store selects the page slot. MenuCentre's pointer array
+        # follows one 32-bit word, hence offset / 4 - 1.
+        page_index = self.asf.u16(page_store + 2) // 4 - 1
+        # The payload adds Flow (raw TSS=2) to this existing action switch,
+        # preserving its native Simple and Pressure destinations.
+        tss_switch = self.asf.u32(self.asf.ptr_to_off(anchors["tss_switch_pointer"]))
+
+        # Queue removal of Reminders navigation and its scheduler in the custom
+        # settings finalizer. Flow reuses the page, not the reminder variables.
+        self.custom_settings_reclaim("reminders")
+        self._inject_payload(AS11_FLOW_WAVE_PAYLOAD, data)
+        # flow_layout in the C payload: native switch pointer, reclaimed page ID.
+        self.asf.patch(struct.pack("<II", tss_switch, page_index), addr=self.asf.ptr_to_off(layout_addr))
+
+        # Reminders construction -> mov r0,r9; mov r1,r4; bl Flow ctor; b.w continuation.
+        # r9 is MenuCentre, r4 is the UI root. Skip all Reminders child
+        # construction too, so no unused widgets or allocations are left behind.
+        self.asf.patch(bytes.fromhex("48462146"), addr=page_start)
+        self.asf.write_thumb2_bl_target(page_start + 4, ctor)
+        self.asf.patch(self.asf.thumb2_bw_bytes(page_start + 8, anchors["page_build_end"]), addr=page_start + 8)
+
+        # bl stock GUI update -> bl wrapper that also samples before LCD sleep gating.
+        # Capture belongs to the outer UI poll, so it continues while asleep
+        # and does not depend on paint callbacks or scroll animations.
+        self.asf.write_thumb2_bl_target(gui_call, gui_wrapper)
+        # bl native therapy-page predicate -> bl predicate including the Flow page.
+        # Both state publication and UI policy must treat the reused slot as
+        # a therapy screen, rather than as the former Reminders page.
+        for off in therapy_calls:
+            self.asf.write_thumb2_bl_target(off, therapy_wrapper)
+
+        # Make raw option 2 selectable without changing the user's default style.
+        row = self.asf.find_descriptors("TSS", ("g5",))[0]
+        self.asf.write_descriptor_fields(row, {"option_mask": row["option_mask"] | 4})
+        print("Patching Flow therapy view... native page %d, reclaiming Reminders" % page_index)
+        return PatchOutcome.ok()
+
     def screen_keep_awake(self):
         """Toggle LCD inactivity suppression with a three-finger hold."""
         ver = self._payload_version_key()
@@ -3091,6 +3183,18 @@ PATCH_LIST = [
         "function": "header_clock",
     },
     {
+        "arg": "patch-custom-settings",
+        "desc": "Expose settings requested by active feature patches.",
+        "default": True,
+        "function": "enable_custom_settings",
+    },
+    {
+        "arg": "patch-flow-wave",
+        "desc": "Show live flow and pressure waveforms in the Flow therapy view.",
+        "default": False,
+        "function": "flow_wave",
+    },
+    {
         "arg": "patch-screen-keep-awake",
         "desc": "Toggle LCD inactivity suppression with a three-finger hold.",
         "default": True,
@@ -3122,12 +3226,6 @@ PATCH_LIST = [
         "desc": "Add ASV/ASVAuto backup-rate suppression and control.",
         "default": True,
         "function": "asv_backup_rate",
-    },
-    {
-        "arg": "patch-custom-settings",
-        "desc": "Expose settings requested by active feature patches.",
-        "default": True,
-        "function": "enable_custom_settings",
     },
     {
         "arg": "patch-motor-nagscreen",

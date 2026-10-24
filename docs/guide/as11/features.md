@@ -31,6 +31,12 @@ screens. It also adds inspiratory time to ASV and ASVAuto.
 The separate `therapy-screen-style patch` adds `Therapy View` under Configuration,
 with `Simple`, `Pressure`, and `Flow` choices.
 
+With the optional FlowWave patch, `Flow` shows the last 12 seconds of breathing
+flow and mask pressure, with the current pressure in the upper-left corner.
+The graph makes room when you expand the statistics. This patch requires
+custom settings and replaces Reminders.
+Without FlowWave, selecting `Flow` displays the Simple screen.
+
 ## ASV Pressure-Support Range
 
 The ASV range patch removes the stock 5 cmH2O minimum separation between
@@ -43,14 +49,15 @@ The ASV backup-rate patch adds a persistent `Backup Rate` control to the
 clinical therapy settings in ASV and ASVAuto. `On` preserves stock behavior
 and `Off` suppresses backup breaths. The default is `On`.
 
-See [Air11 Custom Settings](../../as11/custom_settings.md) for persistence and
-fallback behavior.
+Without the custom-settings patch, backup breaths are disabled without a menu
+control.
 
 ## Header Clock
 
 The clock patch shows local time in the home and therapy-screen headers.
 Enable `Clock` in the clinical menu's Configuration section. The default is
 `Off`.
+Without the custom-settings patch, the clock is always shown.
 
 ## Startup Logo (Optional)
 
@@ -72,9 +79,6 @@ The custom-settings patch adds the `Backup Rate` and `Clock` menu controls
 used by the corresponding patches, and the `Therapy View` selector. Their
 values are saved across restarts. Backup Rate and Clock replace the stock
 Reminders feature; Therapy View preserves it when used on its own.
-
-See [Air11 Custom Settings](../../as11/custom_settings.md) for setting
-assignments and behavior when this patch is disabled.
 
 ## Languages and Defaults
 

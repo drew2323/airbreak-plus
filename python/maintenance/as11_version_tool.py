@@ -152,6 +152,7 @@ class PortCandidates:
     ota_compatibility: OtaCompatibilityCandidates
     ble_oxi_fallback: dict[str, AddressResult] | None
     scroll_animation: AddressResult | None
+    flow_wave: dict[str, AddressResult] | None
 
 
 @dataclass(frozen=True)
@@ -357,6 +358,23 @@ class AddressMatcher:
             )
 
         first = candidates[0]
+        # Tiny getters often share the same load and differ only in a B.W
+        # displacement. Match the callee, not bytes from that displacement.
+        tail = thumb2_bw_target(self.source, source_address + 2)
+        if tail is not None:
+            callee = self.function(tail)
+            prefix = self.source[source_address - FLASH_BASE:source_address - FLASH_BASE + 2]
+            matches = [
+                address for address in range(first.address - 128, first.address + 130, 2)
+                if self.target[address - FLASH_BASE:address - FLASH_BASE + 2] == prefix
+                and thumb2_bw_target(self.target, address + 2) == callee.address
+            ] if callee.address is not None else []
+            return AddressResult(
+                source_address, matches[0] if len(matches) == 1 else None,
+                callee.quality if len(matches) == 1 else "missing",
+                "load/tail-call wrapper: %d matches for transferred callee" % len(matches),
+                tuple(matches) if len(matches) != 1 else (),
+            )
         starts, width = self._local_prefix_matches(
             source_address, first.address
         )
@@ -628,6 +646,28 @@ def unique_pointer(data: bytes, value: int) -> tuple[int | None, tuple[int, ...]
     return (matches[0] if len(matches) == 1 else None, tuple(matches))
 
 
+def resolve_vtable_slot(
+        data: bytes, source_slot: int, stubs: dict[str, AddressResult], name: str,
+        relative_to: AddressResult | None = None, relative_offset: int = 0) -> AddressResult:
+    """Find a transferred method pointer, optionally at an anchored slot offset."""
+    function = stubs.get(name)
+    if function is None or function.address is None:
+        return AddressResult(source_slot, None, "missing", "%s was not transferred" % name)
+    slot, refs = unique_pointer(data, function.address | 1)
+    quality = function.quality
+    evidence = "unique vtable pointer to transferred %s" % name
+    if relative_to is not None:
+        slot = relative_to.address + relative_offset if relative_to.address is not None else None
+        slot = slot if slot in refs else None
+        if relative_to.quality != "strong":
+            quality = relative_to.quality
+        evidence = "pointer to transferred %s at anchor slot %+d" % (name, relative_offset)
+    if slot is None:
+        evidence = "no verified slot: " + evidence
+    return AddressResult(source_slot, slot, quality if slot is not None else "missing",
+        evidence, refs if slot is None else ())
+
+
 def resolve_cellular_download_candidates(
         target_data: bytes,
         matcher: AddressMatcher,
@@ -667,23 +707,6 @@ def resolve_cellular_download_candidates(
                 alternatives,
             )
 
-    def vtable_slot(name: str, source_slot: int) -> AddressResult:
-        function = stubs.get(name)
-        if function is None or function.address is None:
-            return AddressResult(
-                source_slot, None, "missing",
-                "%s was not transferred" % name,
-            )
-        slot, refs = unique_pointer(target_data, function.address | 1)
-        quality = function.quality if slot is not None else "missing"
-        return AddressResult(
-            source_slot,
-            slot,
-            quality,
-            "unique vtable pointer to transferred %s" % name,
-            refs if slot is None else (),
-        )
-
     set_state = stubs.get("upgrade_command_executor_set_state")
     set_state_prologue = (
         image_bytes_at(target_data, set_state.address, 4)
@@ -691,9 +714,9 @@ def resolve_cellular_download_candidates(
     )
     return CellularDownloadCandidates(
         task_pointer_slot=task_slot,
-        can_start_vtable_slot=vtable_slot(
+        can_start_vtable_slot=resolve_vtable_slot(
+            target_data, reference["can_start_vtable_slot"], stubs,
             "gfile_fetcher_control_can_start",
-            reference["can_start_vtable_slot"],
         ),
         set_state_prologue=set_state_prologue,
     )
@@ -1079,6 +1102,55 @@ def resolve_ble_oxi_fallback_candidates(
     return sites
 
 
+def resolve_flow_wave_candidates(
+        firmware: AS11Firmware, matcher: AddressMatcher, stubs: dict[str, AddressResult],
+        reference: dict) -> dict[str, AddressResult]:
+    """Locate the reclaimed page construction and native TSS selector."""
+    # Block boundaries are candidates, not proof that no branch enters their
+    # interior. Review control flow and the payload's native widget layouts
+    # alongside these addresses when porting to another APPX.
+    data = firmware.data
+    sites = {name: matcher.site(address) for name, address in reference.items()}
+    name = "user_interface_update_gui_state_and_cache"
+    # A changed prologue can leave a match inside the update function. Its
+    # caller identifies the entry; only accept a call into that matched body.
+    function = stubs[name]
+    call = sites["gui_update_call"]
+    if function.quality == "weak" and function.address is not None:
+        entries = {
+            target for address in ((call.address,) if call.address else ()) + call.alternatives
+            if (target := thumb2_bl_target(data, address)) is not None
+            and abs(function.address - target) <= 16
+        }
+        if len(entries) == 1:
+            stubs[name] = AddressResult(function.source_address, entries.pop(), "strong",
+                                       "GUI update call resolves the entry of the matched function body")
+    sites["gui_update_call"] = resolve_callsite(data, sites["gui_update_call"], stubs[name], name)
+    name = "GuiMenuCentre_is_therapy_page"
+    for site in ("therapy_page_state_call", "therapy_page_policy_call"):
+        sites[site] = resolve_callsite(data, sites[site], stubs[name], name)
+
+    # TSS selects a DataItem switch. Its constructor loads R1 with the var ID
+    # and R0 from a literal containing the switch object address.
+    tss = firmware._resolve_var_ident("TSS")
+    switch_ctor = stubs["GuiDataItemSwitch_ctor"]
+    pointers = []
+    if tss is not None and switch_ctor.address is not None:
+        for call in thumb2_bl_calls_to(data, switch_ctor.address):
+            if thumb2_movw_immediate(data, call - 8, register=1) != tss:
+                continue
+            first, second = struct.unpack_from("<HH", data, call - 4 - FLASH_BASE)
+            if first == 0xF8DF and second >> 12 == 0:
+                pointers.append((call & ~3) + (second & 0xFFF))
+    sites["tss_switch_pointer"] = AddressResult(
+        reference["tss_switch_pointer"], pointers[0] if len(pointers) == 1 else None,
+        "strong" if len(pointers) == 1 else "missing",
+        "TSS DataItem-switch constructor: %d pointer literals" % len(pointers),
+        tuple(pointers) if len(pointers) != 1 else (),
+    )
+    return sites
+
+
 def resolve_custom_settings_candidates(
         firmware: AS11Firmware,
         matcher: AddressMatcher,
@@ -1108,6 +1180,9 @@ def resolve_custom_settings_candidates(
         sites[name] = matcher.site(
             value[0] if isinstance(value, tuple) else value
         )
+    for name in ("row_build_start", "row_build_end"):
+        if name in reminders:
+            sites[name] = matcher.site(reminders[name])
 
     row_constructor = matcher.function(reminders["row_call"][1])
     scheduler_target = matcher.function(reminders["scheduler_call"][1])
@@ -1736,10 +1811,14 @@ def resolve_port_candidates(
         resolve_scroll_animation_candidate(target_fw.data, stubs, reference["scroll_animation"])
         if "scroll_animation" in reference else None
     )
+    flow_wave = (
+        resolve_flow_wave_candidates(target_fw, matcher, stubs, reference["flow_wave"])
+        if reference.get("flow_wave") is not None else None
+    )
     return PortCandidates(
         stubs, cloud_firmware_change, cellular_download, rpc_dispatcher, mop,
         timezone_write, header_clock, screen_keep_awake, custom_settings, therapy_screen_style, asv,
-        ota_compatibility, ble_oxi_fallback, scroll_animation
+        ota_compatibility, ble_oxi_fallback, scroll_animation, flow_wave
     )
 
 
@@ -2086,6 +2165,12 @@ def self_check_candidates(
             derived_candidate(image_bytes_at(target_fw.data, result.address, 6), result,
                               "displaced instructions and native step store")))
 
+    for name, value in (expected_version.get("flow_wave") or {}).items():
+        result = (candidates.flow_wave or {}).get(
+            name, AddressResult(0, None, "missing", "reference has no patch data"))
+        checks.append(compare_candidate("flow_wave.%s" % name, value,
+            CandidateValue(result.address, result.quality, result.evidence)))
+
     custom_expected = expected_version.get("custom_settings")
     if custom_expected is not None:
         enum_table = candidates.custom_settings.rpc_enum_symbols
@@ -2128,6 +2213,11 @@ def self_check_candidates(
                 reminders[name][0],
                 CandidateValue(result.address, result.quality, result.evidence),
             ))
+        for name in ("row_build_start", "row_build_end"):
+            if name in reminders:
+                result = sites.get(name, AddressResult(0, None, "missing", "reference has no construction boundary"))
+                checks.append(compare_candidate("custom_settings.reminders." + name, reminders[name],
+                    CandidateValue(result.address, result.quality, result.evidence)))
 
         row_call = sites["row_call"]
         row_call_target = (
@@ -2384,6 +2474,10 @@ def prepare(args) -> int:
     )
     if candidates.scroll_animation is not None:
         address_rows.append(("scroll_animation", "step_init", candidates.scroll_animation))
+    address_rows.extend(
+        ("flow_wave", name, result)
+        for name, result in (candidates.flow_wave or {}).items()
+    )
     address_rows.extend((
         ("custom_settings", "row_constructor", row_ctor_result),
         ("custom_settings", "scheduler_target", scheduler_target_result),
@@ -2563,6 +2657,15 @@ def prepare(args) -> int:
             '    },',
         ]
 
+    flow_wave_snippet_lines = []
+    if candidates.flow_wave is not None:
+        flow_wave_snippet_lines = [
+            '    "flow_wave": {',
+            *('        "%s": %s,' % (name, format_address(result.address))
+              for name, result in candidates.flow_wave.items()),
+            '    },',
+        ]
+
     snippets = [
         "# Candidate entry for AS11_PATCH_VERSIONS.",
         "# Verify against the target firmware before copying.",
@@ -2571,6 +2674,7 @@ def prepare(args) -> int:
         *cellular_snippet_lines,
         *oxi_snippet_lines,
         *scroll_snippet_lines,
+        *flow_wave_snippet_lines,
         *cloud_snippet_lines,
         "    \"rpc_dispatcher\": {",
         "        \"init_entry\": %s," % format_address(
@@ -2641,6 +2745,8 @@ def prepare(args) -> int:
         )),
         "                \"scheduler_call\": (%s, %s)," %
         (format_address(scheduler_call), format_address(scheduler_target)),
+        *("                \"%s\": %s," % (name, format_address(custom_site_results[name].address))
+          for name in ("row_build_start", "row_build_end") if name in custom_site_results),
         "            },",
         "        },",
         "    },",
