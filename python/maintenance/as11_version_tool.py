@@ -1030,6 +1030,7 @@ def resolve_screen_keep_awake_candidates(
             "touch_report_vtable_slot",
             "process_touch_events_call",
             "fade_transition_call",
+            "target_intensity_call",
         )
     }
     sites["runtime_state_init"] = matcher.site(
@@ -1060,6 +1061,9 @@ def resolve_screen_keep_awake_candidates(
         stubs["led_channel_schedule_transition"],
         "LED timeout transition",
     )
+    sites["target_intensity_call"] = resolve_callsite(
+        data, sites["target_intensity_call"],
+        stubs["led_channel_select_target_intensity"], "LED target intensity selector")
     return ScreenKeepAwakeCandidates(sites)
 
 
@@ -2122,7 +2126,8 @@ def self_check_candidates(
         for name in (
                 "touch_report_vtable_slot",
                 "process_touch_events_call",
-                "fade_transition_call"):
+                "fade_transition_call",
+                "target_intensity_call"):
             result = (
                 screen.sites[name]
                 if screen is not None else
@@ -2628,6 +2633,9 @@ def prepare(args) -> int:
             ),
             "        \"fade_transition_call\": %s," % format_address(
                 screen_keep_awake_sites["fade_transition_call"].address
+            ),
+            "        \"target_intensity_call\": %s," % format_address(
+                screen_keep_awake_sites["target_intensity_call"].address
             ),
             "        \"runtime_state_init\": {",
             "            \"address\": %s," % format_address(

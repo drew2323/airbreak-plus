@@ -2965,19 +2965,24 @@ class S11FirmwarePatches(CompiledPayloadMixin):
         report_wrapper = self._elf_symbol_addr(elf_path, "start")
         ui_wrapper = self._elf_symbol_addr(elf_path, "screen_keep_awake_process_touch_events")
         fade_wrapper = self._elf_symbol_addr(elf_path, "screen_keep_awake_schedule_transition")
+        intensity_wrapper = self._elf_symbol_addr(elf_path, "screen_keep_awake_select_target_intensity")
         stock_report = self._elf_symbol_addr(elf_path, "touch_screen_controller_process_report")
         stock_ui = self._elf_symbol_addr(elf_path, "user_interface_process_touch_events")
         stock_transition = self._elf_symbol_addr(elf_path, "led_channel_schedule_transition")
+        stock_intensity = self._elf_symbol_addr(elf_path, "led_channel_select_target_intensity")
 
         report_slot = self.asf.ptr_to_off(anchors["touch_report_vtable_slot"])
         ui_call = self.asf.ptr_to_off(anchors["process_touch_events_call"])
         fade_call = self.asf.ptr_to_off(anchors["fade_transition_call"])
+        intensity_call = self.asf.ptr_to_off(anchors["target_intensity_call"])
         if self.asf.u32(report_slot) != (stock_report | 1):
             raise ValueError("screen_keep_awake: touch-report vtable slot does not match")
         if self.asf.read_thumb2_bl_target(ui_call) != stock_ui:
             raise ValueError("screen_keep_awake: touch-event consumer call does not match")
         if self.asf.read_thumb2_bl_target(fade_call) != stock_transition:
             raise ValueError("screen_keep_awake: LCD fade transition call does not match")
+        if self.asf.read_thumb2_bl_target(intensity_call) != stock_intensity:
+            raise ValueError("screen_keep_awake: target intensity call does not match")
 
         flash, _off = self._inject_payload(AS11_SCREEN_KEEP_AWAKE_PAYLOAD, data)
         # vtable: stock report processor -> three-finger gesture wrapper
@@ -2986,6 +2991,8 @@ class S11FirmwarePatches(CompiledPayloadMixin):
         self.asf.write_thumb2_bl_target(ui_call, ui_wrapper)
         # bl stock timeout transition -> bl LCD-aware transition wrapper
         self.asf.write_thumb2_bl_target(fade_call, fade_wrapper)
+        # bl stock target selector -> bl LCD inactivity-stage filter
+        self.asf.write_thumb2_bl_target(intensity_call, intensity_wrapper)
         state_init = anchors["runtime_state_init"]
         # strb.w r0,[r4,#0x68] -> str.w r0,[r4,#0x68]
         # The wider store initializes the two alignment bytes used for state.

@@ -50,6 +50,8 @@ NSTUB(0x08092992, user_interface_process_touch_events)
 NSTUB(0x080A17C0, led_status_controller_singleton)
 NSTUB(0x080B0382, led_timeout_channel_slot_by_index)
 NSTUB(0x080B00A4, led_channel_schedule_transition)
+NSTUB(0x080B0066, led_channel_select_target_intensity)
+NSTUB(0x080B0084, ambient_light_mode_is_dark)
 NSTUB(0x080B05AE, led_timeout_fade_channels_off)
 
 NSTUB(0x080A4B92, ble_oxi_gatt_client_on_stack_event)

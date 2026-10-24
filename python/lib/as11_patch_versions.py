@@ -251,6 +251,7 @@ AS11_PATCH_VERSIONS = {
             "touch_report_vtable_slot": 0x081A98B4,
             "process_touch_events_call": 0x08091E9C,
             "fade_transition_call": 0x080AF884,
+            "target_intensity_call": 0x080AF2D4,
             "runtime_state_init": {
                 "address": 0x080AF2B0,
                 "before": "84f86800",
@@ -347,6 +348,7 @@ AS11_PATCH_VERSIONS = {
             "touch_report_vtable_slot": 0x081AB718,
             "process_touch_events_call": 0x08092406,
             "fade_transition_call": 0x080AFD78,
+            "target_intensity_call": 0x080AF7C8,
             "runtime_state_init": {
                 "address": 0x080AF7A4,
                 "before": "84f86800",
@@ -462,6 +464,7 @@ AS11_PATCH_VERSIONS = {
             "touch_report_vtable_slot": 0x081AC774,
             "process_touch_events_call": 0x08092C52,
             "fade_transition_call": 0x080B05DC,
+            "target_intensity_call": 0x080B002C,
             "runtime_state_init": {
                 "address": 0x080B0008,
                 "before": "84f86800",
@@ -527,6 +530,7 @@ AS11_PATCH_VERSIONS = {
             "touch_report_vtable_slot": 0x081AF890,
             "process_touch_events_call": 0x0809378C,
             "fade_transition_call": 0x080B1760,
+            "target_intensity_call": 0x080B11B0,
             "runtime_state_init": {
                 "address": 0x080B118C,
                 "before": "84f86800",

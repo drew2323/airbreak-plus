@@ -157,6 +157,8 @@ extern void ring_buffer_write_elements(
     void *ring, const void *elements, unsigned int count);
 extern void user_interface_process_touch_events(void *user_interface);
 extern void *led_status_controller_singleton(void);
+extern unsigned int led_channel_select_target_intensity(void *channel);
+extern unsigned int ambient_light_mode_is_dark(void);
 extern void *led_timeout_channel_slot_by_index(
     void *channels, unsigned int index);
 extern void led_channel_schedule_transition(

@@ -14,6 +14,8 @@
 #define LED_CHANNEL_INDEX_OFFSET 0x00u
 #define LED_TRANSITION_SLOT_0_OFFSET 0x2Cu
 #define LED_RUNTIME_STATE_OFFSET 0x6Au
+#define LED_DIM_TARGET_OFFSET    0x74u
+#define LED_BRIGHT_TARGET_OFFSET 0x78u
 #define LED_LCD_CHANNEL_INDEX     3u
 
 #define TOUCH_POINT_ACTIVE 0x80u
@@ -309,6 +311,19 @@ void screen_keep_awake_process_touch_events(void *user_interface)
                 LED_TIMEOUT_OFFSET);
         clear_confirmation();
     }
+}
+
+unsigned int screen_keep_awake_select_target_intensity(void *channel)
+{
+    unsigned char *bytes = channel;
+
+    if (bytes[LED_CHANNEL_INDEX_OFFSET] == LED_LCD_CHANNEL_INDEX &&
+            (bytes[LED_RUNTIME_STATE_OFFSET] & STATE_KEEP_AWAKE) != 0) {
+        /* Ignore the inactivity grace stage when selecting the LCD target. */
+        return read_u32(channel, ambient_light_mode_is_dark() ?
+            LED_DIM_TARGET_OFFSET : LED_BRIGHT_TARGET_OFFSET);
+    }
+    return led_channel_select_target_intensity(channel);
 }
 
 void screen_keep_awake_schedule_transition(
