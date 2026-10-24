@@ -38,6 +38,11 @@ AS11_FGBL_PATCH_VERSIONS = {
 # An explicit None means that the patch does not apply to that APPX.
 AS11_PATCH_VERSIONS = {
     "8_0_1": {
+        "airplane_reminder": {
+            "address": 0x0806F4F6,
+            "before": "00f072f8",
+            "after": "00bf00bf",
+        },
         "scroll_animation": {
             "step_init": 0x08066488,
             "before": "ab6305f13c03",
@@ -86,6 +91,11 @@ AS11_PATCH_VERSIONS = {
         },
     },
     "8_3_0": {
+        "airplane_reminder": {
+            "address": 0x0808D87C,
+            "before": "00f071f8",
+            "after": "00bf00bf",
+        },
         "scroll_animation": {
             "step_init": 0x08066D14,
             "before": "ab6305f13c03",
@@ -158,6 +168,11 @@ AS11_PATCH_VERSIONS = {
         },
     },
     "8_4_0": {
+        "airplane_reminder": {
+            "address": 0x0809176A,
+            "before": "00f076f8",
+            "after": "00bf00bf",
+        },
         "scroll_animation": {
             "step_init": 0x08067AA8,
             "before": "29640121ab63",
@@ -244,6 +259,11 @@ AS11_PATCH_VERSIONS = {
         },
     },
     "8_5_0": {
+        "airplane_reminder": {
+            "address": 0x08091CD0,
+            "before": "00f07bf8",
+            "after": "00bf00bf",
+        },
         "scroll_animation": {
             "step_init": 0x08067C84,
             "before": "29640121ab63",
@@ -335,6 +355,11 @@ AS11_PATCH_VERSIONS = {
         },
     },
     "8_6_0": {
+        "airplane_reminder": {
+            "address": 0x08092520,
+            "before": "00f079f8",
+            "after": "00bf00bf",
+        },
         "scroll_animation": {
             "step_init": 0x080681E4,
             "before": "29640121ab63",
@@ -445,6 +470,11 @@ AS11_PATCH_VERSIONS = {
         },
     },
     "8_7_0": {
+        "airplane_reminder": {
+            "address": 0x08093050,
+            "before": "00f079f8",
+            "after": "00bf00bf",
+        },
         "cellular_download": {
             "task_pointer_slot": 0x3000AF38,
             "can_start_vtable_slot": 0x081C9794,

@@ -2427,6 +2427,13 @@ class S11FirmwarePatches(CompiledPayloadMixin):
             (AS11_ASV_BACKUP_RATE_PAYLOAD, ver, len(data), flash)
         )
 
+    def airplane_reminder(self):
+        # BL standby_reminder -> NOP; NOP
+        # The helper checks QFC and a one-shot latch, then requests the dialog via ZUI.
+        site = self._patch_version_data("airplane_reminder")
+        changed = self.asf.patch_exact(site["address"], site["before"], site["after"])
+        return PatchOutcome.ok("standby airplane-mode reminder disabled" if changed else "already disabled")
+
     def motor_nagscreen(self):
         try:
             offset = self.asf.find_bytes(bytes.fromhex("C000B304"))
@@ -3226,6 +3233,12 @@ PATCH_LIST = [
         "desc": "Add ASV/ASVAuto backup-rate suppression and control.",
         "default": True,
         "function": "asv_backup_rate",
+    },
+    {
+        "arg": "patch-airplane-reminder",
+        "desc": "Suppress the standby airplane-mode reminder.",
+        "default": True,
+        "function": "airplane_reminder",
     },
     {
         "arg": "patch-motor-nagscreen",

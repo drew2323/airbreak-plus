@@ -100,6 +100,7 @@ instead of producing that reduced result.
 | Startup logo (optional) | Selects the logo shown when the device starts | `--patch-startup-logo [0..4]` |
 | Sensitivity split screen (optional) | Shows a graphic beside Trigger/Cycle sensitivity choices in supported modes | `--patch-sensitivity-split-screen` |
 | Motor nag removal | Removes the design-life warning while preserving the runtime counter | `--patch-motor-nagscreen` |
+| Airplane-mode reminder | Removes the automatic airplane-mode reminder | `--patch-airplane-reminder` |
 
 ### Miscellaneous
 

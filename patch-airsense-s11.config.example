@@ -21,6 +21,7 @@
 # --patch-asv-backup-rate y
 # --patch-custom-settings y
 # --patch-motor-nagscreen y
+# --patch-airplane-reminder y
 # --patch-timezone-write y
 
 # Optional startup logo: 0 Off, 1 AirSense 11, 2 AirCurve 11, 3 Lumis 11, 4 ResMed.

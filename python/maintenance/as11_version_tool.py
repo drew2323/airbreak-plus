@@ -153,6 +153,7 @@ class PortCandidates:
     ble_oxi_fallback: dict[str, AddressResult] | None
     scroll_animation: AddressResult | None
     flow_wave: dict[str, AddressResult] | None
+    airplane_reminder: AddressResult | None
 
 
 @dataclass(frozen=True)
@@ -1815,10 +1816,18 @@ def resolve_port_candidates(
         resolve_flow_wave_candidates(target_fw, matcher, stubs, reference["flow_wave"])
         if reference.get("flow_wave") is not None else None
     )
+    airplane_reminder = None
+    if reference.get("airplane_reminder") is not None:
+        address = reference["airplane_reminder"]["address"]
+        target = thumb2_bl_target(reference_fw.data, address)
+        if target is None:
+            raise ValueError("reference airplane reminder site is not a BL")
+        airplane_reminder = resolve_callsite(
+            target_fw.data, matcher.site(address), matcher.function(target), "airplane reminder")
     return PortCandidates(
         stubs, cloud_firmware_change, cellular_download, rpc_dispatcher, mop,
         timezone_write, header_clock, screen_keep_awake, custom_settings, therapy_screen_style, asv,
-        ota_compatibility, ble_oxi_fallback, scroll_animation, flow_wave
+        ota_compatibility, ble_oxi_fallback, scroll_animation, flow_wave, airplane_reminder
     )
 
 
@@ -2156,6 +2165,15 @@ def self_check_candidates(
         checks.append(compare_candidate("ble_oxi_fallback.%s" % name, value,
             CandidateValue(result.address, result.quality, result.evidence)))
 
+    reminder_expected = expected_version.get("airplane_reminder")
+    if reminder_expected is not None:
+        result = candidates.airplane_reminder or AddressResult(0, None, "missing", "reference has no patch data")
+        checks.append(compare_candidate("airplane_reminder.address", reminder_expected["address"],
+            CandidateValue(result.address, result.quality, result.evidence)))
+        checks.append(compare_candidate("airplane_reminder.before", reminder_expected["before"],
+            derived_candidate(image_bytes_at(target_fw.data, result.address, 4), result,
+                              "call to standby airplane-mode reminder")))
+
     scroll_expected = expected_version.get("scroll_animation")
     if scroll_expected is not None:
         result = candidates.scroll_animation or AddressResult(0, None, "missing", "reference has no patch data")
@@ -2474,6 +2492,8 @@ def prepare(args) -> int:
     )
     if candidates.scroll_animation is not None:
         address_rows.append(("scroll_animation", "step_init", candidates.scroll_animation))
+    if candidates.airplane_reminder is not None:
+        address_rows.append(("airplane_reminder", "address", candidates.airplane_reminder))
     address_rows.extend(
         ("flow_wave", name, result)
         for name, result in (candidates.flow_wave or {}).items()
@@ -2657,6 +2677,17 @@ def prepare(args) -> int:
             '    },',
         ]
 
+    reminder_snippet_lines = []
+    if candidates.airplane_reminder is not None:
+        site = candidates.airplane_reminder.address
+        reminder_snippet_lines = [
+            '    "airplane_reminder": {',
+            '        "address": %s,' % format_address(site),
+            '        "before": %r,' % (image_bytes_at(target_fw.data, site, 4) or "TODO"),
+            '        "after": "00bf00bf",',
+            '    },',
+        ]
+
     flow_wave_snippet_lines = []
     if candidates.flow_wave is not None:
         flow_wave_snippet_lines = [
@@ -2674,6 +2705,7 @@ def prepare(args) -> int:
         *cellular_snippet_lines,
         *oxi_snippet_lines,
         *scroll_snippet_lines,
+        *reminder_snippet_lines,
         *flow_wave_snippet_lines,
         *cloud_snippet_lines,
         "    \"rpc_dispatcher\": {",
