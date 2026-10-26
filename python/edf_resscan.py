@@ -935,6 +935,12 @@ SYNTHETIC_CPAP_STR_PRESSURE = (
 
 FLOW_PRESSURE_LOW = 6.4
 FLOW_PRESSURE_HIGH = 7.9
+# Frozen from the current fixture's |Flow.40ms| distribution: >=1.8 L/s
+# onset, linearly saturating at 2.4 L/s. Events are contiguous threshold hits,
+# allowing at most two intervening 40 ms samples (120 ms grouping window).
+FLOW_RARE_PEAK_ONSET_LPS = 1.8
+FLOW_RARE_PEAK_SATURATION_LPS = 2.4
+FLOW_RARE_PEAK_MAX_AT_7_5 = 9.5
 
 
 class FlowPressureModel:
@@ -948,6 +954,12 @@ class FlowPressureModel:
     def pressure(self, flow):
         if not math.isfinite(float(flow)) or self.reference <= 0:
             return self.baseline
+        magnitude = abs(float(flow))
+        if magnitude >= FLOW_RARE_PEAK_ONSET_LPS:
+            fraction = min(1.0, (magnitude - FLOW_RARE_PEAK_ONSET_LPS) /
+                           (FLOW_RARE_PEAK_SATURATION_LPS - FLOW_RARE_PEAK_ONSET_LPS))
+            peak = self.baseline * FLOW_RARE_PEAK_MAX_AT_7_5 / 7.5
+            return self.baseline + fraction * (peak - self.baseline)
         fraction = max(-1.0, min(1.0, float(flow) / self.reference))
         low = self.baseline * FLOW_PRESSURE_LOW / 7.5
         high = self.baseline * FLOW_PRESSURE_HIGH / 7.5

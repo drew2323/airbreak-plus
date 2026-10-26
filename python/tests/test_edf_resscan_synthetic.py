@@ -65,13 +65,27 @@ class SyntheticPressureTests(unittest.TestCase):
     def test_flow_pressure_bounds_sign_clipping_and_missing(self):
         flow = [-100.0] * 20 + [0.0] + [100.0] * 20 + [-1000.0, 1000.0, float("nan")]
         model = edf.FlowPressureModel(7.5, flow)
-        got = [model.pressure(x) for x in [-100, 0, 100, -1000, 1000, float("nan")]]
-        self.assertEqual(got, [7.9, 7.5, 6.4, 7.9, 6.4, 7.5])
+        got = [model.pressure(x) for x in [-1, 0, 1, -100, 100, float("nan")]]
+        self.assertEqual(got, [7.504, 7.5, 7.489, 9.5, 9.5, 7.5])
+        common = edf.FlowPressureModel(7.5, [-1.0, 0.0, 1.0])
+        self.assertAlmostEqual(common.pressure(-1), 7.9)
+        self.assertAlmostEqual(common.pressure(1), 6.4)
+        self.assertAlmostEqual(edf.FlowPressureModel(7.5, [-1.0, 1.0]).pressure(-1), 7.9)
+        self.assertAlmostEqual(edf.FlowPressureModel(7.5, [-1.0, 1.0]).pressure(1), 6.4)
+
+    def test_rare_flow_peak_is_continuous_bounded_and_sign_symmetric(self):
+        model = edf.FlowPressureModel(7.5, [-2.0, 2.0])
+        self.assertAlmostEqual(model.pressure(1.8), 7.5)
+        self.assertGreater(model.pressure(1.81), 7.5)
+        self.assertAlmostEqual(model.pressure(2.4), 9.5)
+        self.assertEqual(model.pressure(100), 9.5)
+        self.assertEqual(model.pressure(-100), 9.5)
+        self.assertEqual(model.pressure(float("nan")), 7.5)
 
     def test_flow_map_robust_reference_and_zero_baseline(self):
-        model = edf.FlowPressureModel(7.5, [-2] * 20 + [-1, 0, 1] + [2] * 20 + [500])
-        self.assertAlmostEqual(model.pressure(-2), 7.9)
-        self.assertAlmostEqual(model.pressure(2), 6.4)
+        model = edf.FlowPressureModel(7.5, [-1] * 20 + [-0.5, 0, 0.5] + [1] * 20 + [1.7])
+        self.assertAlmostEqual(model.pressure(-1), 7.9)
+        self.assertAlmostEqual(model.pressure(1), 6.4)
         self.assertEqual(model.pressure(0), 7.5)
         self.assertEqual(edf.FlowPressureModel(7.5, []).pressure(10), 7.5)
 
@@ -86,9 +100,9 @@ class SyntheticPressureTests(unittest.TestCase):
         self.assertFalse(edf.same_edf_session("20261025_233436_BRP.edf", "20261025_233346_PLD.edf"))
 
     def test_inspiratory_reduces_expiratory_increases_and_reference_is_p95(self):
-        model = edf.FlowPressureModel(7.5, [-2] * 20 + [-1, 0, 1] + [2] * 20 + [500])
-        self.assertAlmostEqual(model.pressure(-2), 7.9)
-        self.assertAlmostEqual(model.pressure(2), 6.4)
+        model = edf.FlowPressureModel(7.5, [-1] * 20 + [-0.5, 0, 0.5] + [1] * 20 + [1.7])
+        self.assertAlmostEqual(model.pressure(-1), 7.9)
+        self.assertAlmostEqual(model.pressure(1), 6.4)
         self.assertEqual(model.pressure(0), 7.5)
         self.assertGreater(model.pressure(-1), 7.5)
         self.assertLess(model.pressure(1), 7.5)
