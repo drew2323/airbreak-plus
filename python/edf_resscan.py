@@ -933,6 +933,79 @@ SYNTHETIC_CPAP_STR_PRESSURE = (
 )
 
 
+FLOW_PRESSURE_LOW = 6.4
+FLOW_PRESSURE_HIGH = 7.9
+
+
+class FlowPressureModel:
+    """Deterministic signed-flow heuristic; not a physiology model."""
+    def __init__(self, baseline, flow_samples):
+        self.baseline = float(baseline)
+        valid = sorted(abs(float(x)) for x in flow_samples
+                       if math.isfinite(float(x)))
+        self.reference = valid[max(0, math.ceil(.95 * len(valid)) - 1)] if valid else 0.0
+
+    def pressure(self, flow):
+        if not math.isfinite(float(flow)) or self.reference <= 0:
+            return self.baseline
+        fraction = max(-1.0, min(1.0, float(flow) / self.reference))
+        low = self.baseline * FLOW_PRESSURE_LOW / 7.5
+        high = self.baseline * FLOW_PRESSURE_HIGH / 7.5
+        if fraction < 0:
+            return self.baseline + (-fraction) * (high - self.baseline)
+        return self.baseline - fraction * (self.baseline - low)
+
+
+def flow_driven_mask_pressure(baseline, flow):
+    return FlowPressureModel(baseline, [flow]).pressure(flow)
+
+
+def set_signal_values(record, fields, name, values, preserve_missing=True):
+    names = [item.decode('ascii').rstrip() for item in fields[0]]
+    if name not in names:
+        return record
+    i = names.index(name)
+    if len(values) != int(fields[8][i]):
+        raise ValueError("%s expected %d values, got %d" % (name, int(fields[8][i]), len(values)))
+    spans, _ = signal_spans(map(int, fields[8]))
+    scale, bias, dmin, dmax = signal_scale(fields, i)
+    result = bytearray(record)
+    for j, value in enumerate(values):
+        off = spans[i].start + 2 * j
+        old = struct.unpack_from('<H', result, off)[0]
+        if preserve_missing and old == 0xffff:
+            continue
+        raw = round((value - bias) / scale)
+        raw = max(int(dmin), min(int(dmax), raw))
+        struct.pack_into('<H', result, off, raw & 0xffff)
+    return bytes(result)
+
+
+def same_edf_session(brp_name, pld_name):
+    a = re.match(r'^(\d{8}_\d{6})_BRP\.edf$', Path(brp_name).name, re.I)
+    b = re.match(r'^(\d{8}_\d{6})_PLD\.edf$', Path(pld_name).name, re.I)
+    return bool(a and b and a.group(1) == b.group(1))
+
+
+def flow_pressure_for_record(flow_record, flow_fields, baseline, samples):
+    names = [x.decode('ascii').rstrip() for x in flow_fields[0]]
+    if 'Flow.40ms' not in names:
+        return [baseline] * samples
+    index = names.index('Flow.40ms')
+    spans, _ = signal_spans(map(int, flow_fields[8]))
+    scale, bias, _, _ = signal_scale(flow_fields, index)
+    count = int(flow_fields[8][index])
+    raw = struct.unpack_from('<%dH' % count, flow_record, spans[index].start)
+    values = [v * scale + bias if v != 0xffff else float('nan') for v in raw]
+    model = FlowPressureModel(baseline, values)
+    result = []
+    for j in range(samples):
+        lo, hi = j * count // samples, (j + 1) * count // samples
+        chunk = [values[k] for k in range(lo, hi) if math.isfinite(values[k])]
+        result.append(model.pressure(sum(chunk) / len(chunk)) if chunk else baseline)
+    return result
+
+
 def set_signal_constant(record, fields, name, value, preserve_missing=True):
     """Set every sample of one EDF signal to a physical value."""
     names = [item.decode('ascii').rstrip() for item in fields[0]]
@@ -968,8 +1041,8 @@ def str_record_has_therapy(record, fields):
     return False
 
 
-def make_synthetic_cpap_record(record, fields, channel, pressure):
-    """Make pressure presentation internally consistent with fixed-pressure CPAP."""
+def make_synthetic_cpap_record(record, fields, channel, pressure, flow_record=None, flow_fields=None):
+    """Set synthetic detail pressure; therapy pressure settings remain fixed."""
     if channel == 'STR':
         if not str_record_has_therapy(record, fields):
             return record
@@ -981,9 +1054,19 @@ def make_synthetic_cpap_record(record, fields, channel, pressure):
                 record, fields, name, pressure, preserve_missing=False)
         return record
 
-    for name in SYNTHETIC_CPAP_DETAILED_PRESSURE:
-        record = set_signal_constant(record, fields, name, pressure,
-                                     preserve_missing=True)
+    if flow_record is not None and flow_fields is not None:
+        names = [item.decode('ascii').rstrip() for item in fields[0]]
+        for name in ('Press.40ms', 'MaskPress.2s'):
+            if name in names:
+                i = names.index(name)
+                values = flow_pressure_for_record(flow_record, flow_fields, pressure,
+                                                  int(fields[8][i]))
+                record = set_signal_values(record, fields, name, values,
+                                           preserve_missing=True)
+    else:
+        for name in SYNTHETIC_CPAP_DETAILED_PRESSURE:
+            record = set_signal_constant(record, fields, name, pressure,
+                                         preserve_missing=True)
     return record
 
 
@@ -1001,7 +1084,7 @@ def empty_signal_header(label, channel):
 
 
 def convert_edf(source, output, labels, mid, vid, summaries=None,
-                synthetic_cpap_pressure=None):
+                synthetic_cpap_pressure=None, flow_source=None, flow_path=None):
     """Select signal blocks; optionally reconstruct empty STR rows first."""
     with source.open('rb', buffering=1024 * 1024) as src, \
             output.open('wb', buffering=1024 * 1024) as dst:
@@ -1041,8 +1124,23 @@ def convert_edf(source, output, labels, mid, vid, summaries=None,
             if summaries is not None:
                 record = repair_str_record(record, fields, summaries)
             if synthetic_cpap_pressure is not None:
+                flow_record = record if channel in ('BRP', 'PLD') else None
+                flow_fields_for_record = fields if flow_record is not None and 'Flow.40ms' in names else None
+                if channel == 'PLD' and flow_source is not None:
+                    with flow_source.open('rb') as flow_src:
+                        fheader, ffields = read_edf_header(flow_src)
+                        fspans, fsize = signal_spans(map(int, ffields[8]))
+                        flow_index = records
+                        flow_src.seek(int(fheader[184:192]) + flow_index * fsize)
+                        candidate = flow_src.read(fsize)
+                        if (candidate and fheader[168:184] == header[168:184]
+                                and float(fheader[244:252]) == float(header[244:252])):
+                            flow_record, flow_fields_for_record = candidate, ffields
+                        else:
+                            flow_record, flow_fields_for_record = None, None
                 record = make_synthetic_cpap_record(
-                    record, fields, channel, synthetic_cpap_pressure)
+                    record, fields, channel, synthetic_cpap_pressure,
+                    flow_record, flow_fields_for_record)
             converted = b''.join((record[span] if span is not None else b'').ljust(size, b'\xff')
                                  for span, size in selected)
             converted += struct.pack('<H', crc16(converted))
@@ -1065,7 +1163,7 @@ def edf_channel(path):
 
 def convert_directory(source, output, profile_override=None, repair_str=False,
                       overwrite=False, from_date=None,
-                      synthetic_cpap_pressure=None):
+                      synthetic_cpap_pressure=None, flow_driven_pressure=False):
     source = source.resolve()
     output = output.resolve()
     if not source.is_dir():
@@ -1083,6 +1181,8 @@ def convert_directory(source, output, profile_override=None, repair_str=False,
     identification_is_json = identification_json is not None and identification == identification_json
     source_profile = (original_profile_json(identity) if identification_is_json
                       else original_profile(identity))
+    if flow_driven_pressure and synthetic_cpap_pressure is None:
+        raise ValueError('--flow-driven-pressure requires --synthetic-cpap-pressure')
     if synthetic_cpap_pressure is not None:
         if source_profile[0] != 46:
             raise ValueError('--synthetic-cpap-pressure currently supports Air11/M46 only')
@@ -1153,10 +1253,20 @@ def convert_directory(source, output, profile_override=None, repair_str=False,
                 print("  %s: omitted (not recorded by this profile)" % relative)
                 continue
             try:
+                flow_source = None
+                if (flow_driven_pressure and channel == 'PLD'):
+                    session_prefix = re.match(r'^(\d{8}_\d{6})_PLD$', path.stem, re.I)
+                    if session_prefix:
+                        candidate = path.with_name(session_prefix.group(1) + '_BRP.edf')
+                        if candidate.is_file():
+                            flow_source = candidate
+                if (flow_driven_pressure and channel == 'BRP'):
+                    flow_source = None
                 old, new, records, checksums = convert_edf(
                     path, target, profile.get(channel), mid, vid,
                     summaries if channel == 'STR' else None,
-                    synthetic_cpap_pressure)
+                    synthetic_cpap_pressure,
+                    flow_source=flow_source)
                 if sidecar_name is not None:
                     (target_directory / sidecar_name).write_bytes(checksums)
             except ValueError as error:
@@ -1179,11 +1289,14 @@ def main():
                         help='estimate empty STR days from original PLD/SAD/EVE recordings')
     parser.add_argument('--synthetic-cpap-pressure', type=float, metavar='CMH2O',
                         help='research fixture: export Air11 data as fixed-pressure CPAP')
+    parser.add_argument('--flow-driven-pressure', action='store_true',
+                        help='vary displayed mask pressure from matched Flow.40ms; heuristic only')
     args = parser.parse_args()
     try:
         convert_directory(args.source_dir, args.output_dir, args.profile, args.repair_str,
                           overwrite=args.overwrite, from_date=args.from_date,
-                          synthetic_cpap_pressure=args.synthetic_cpap_pressure)
+                          synthetic_cpap_pressure=args.synthetic_cpap_pressure,
+                          flow_driven_pressure=args.flow_driven_pressure)
     except (OSError, ValueError) as error:
         parser.exit(1, "Error: %s\n" % error)
 

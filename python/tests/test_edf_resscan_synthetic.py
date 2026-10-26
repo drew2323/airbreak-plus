@@ -62,6 +62,50 @@ class SyntheticPressureTests(unittest.TestCase):
         self.assertEqual((software["PlatformIdentifier"], software["VariantIdentifier"]), (46, 3))
         self.assertEqual(edf.crc16(b"abc"), edf.crc16(b"abc"))
 
+    def test_flow_pressure_bounds_sign_clipping_and_missing(self):
+        flow = [-100.0] * 20 + [0.0] + [100.0] * 20 + [-1000.0, 1000.0, float("nan")]
+        model = edf.FlowPressureModel(7.5, flow)
+        got = [model.pressure(x) for x in [-100, 0, 100, -1000, 1000, float("nan")]]
+        self.assertEqual(got, [7.9, 7.5, 6.4, 7.9, 6.4, 7.5])
+
+    def test_flow_map_robust_reference_and_zero_baseline(self):
+        model = edf.FlowPressureModel(7.5, [-2] * 20 + [-1, 0, 1] + [2] * 20 + [500])
+        self.assertAlmostEqual(model.pressure(-2), 7.9)
+        self.assertAlmostEqual(model.pressure(2), 6.4)
+        self.assertEqual(model.pressure(0), 7.5)
+        self.assertEqual(edf.FlowPressureModel(7.5, []).pressure(10), 7.5)
+
+    def test_pressure_sample_conversion_clips_to_signal_range_and_skips_missing(self):
+        fields = fields_for(["MaskPress.2s"], [3], pmin=0, pmax=20, dmin=0, dmax=200)
+        record = record_for([0, 0xffff, 0])
+        result = edf.set_signal_values(record, fields, "MaskPress.2s", [6.4, 7.5, 7.9])
+        self.assertEqual(struct.unpack("<3H", result), (64, 0xffff, 79))
+
+    def test_timestamp_alignment_requires_exact_session_and_record_timing(self):
+        self.assertTrue(edf.same_edf_session("20261025_233436_BRP.edf", "20261025_233436_PLD.edf"))
+        self.assertFalse(edf.same_edf_session("20261025_233436_BRP.edf", "20261025_233346_PLD.edf"))
+
+    def test_inspiratory_reduces_expiratory_increases_and_reference_is_p95(self):
+        model = edf.FlowPressureModel(7.5, [-2] * 20 + [-1, 0, 1] + [2] * 20 + [500])
+        self.assertAlmostEqual(model.pressure(-2), 7.9)
+        self.assertAlmostEqual(model.pressure(2), 6.4)
+        self.assertEqual(model.pressure(0), 7.5)
+        self.assertGreater(model.pressure(-1), 7.5)
+        self.assertLess(model.pressure(1), 7.5)
+        self.assertEqual(edf.FlowPressureModel(7.5, []).pressure(10), 7.5)
+
+    def test_flow_pressure_does_not_change_therapy_fields_or_flow_samples(self):
+        labels = ["Flow.40ms", "Press.40ms", "S.C.Press"]
+        fields = fields_for(labels, [3, 3, 1], pmin=-100, pmax=100, dmin=0, dmax=200)
+        flow = record_for([50, 100, 150] + [75, 75, 75] + [75])
+        # The detailed converter only writes pressure signal samples.
+        before = struct.unpack("<7H", flow)
+        after = edf.set_signal_values(flow, fields, "Press.40ms", [7.9, 7.5, 6.4])
+        values = struct.unpack("<7H", after)
+        self.assertEqual(values[:3], before[:3])
+        self.assertEqual(values[6], before[6])
+        self.assertEqual(values[3:6], (108, 108, 106))
+
 
 if __name__ == "__main__":
     unittest.main()
