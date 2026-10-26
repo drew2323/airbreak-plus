@@ -993,16 +993,18 @@ def flow_pressure_for_record(flow_record, flow_fields, baseline, samples):
         return [baseline] * samples
     index = names.index('Flow.40ms')
     spans, _ = signal_spans(map(int, flow_fields[8]))
-    scale, bias, _, _ = signal_scale(flow_fields, index)
+    scale, bias, dmin, _ = signal_scale(flow_fields, index)
     count = int(flow_fields[8][index])
     raw = struct.unpack_from('<%dH' % count, flow_record, spans[index].start)
-    values = [v * scale + bias if v != 0xffff else float('nan') for v in raw]
+    values = [(v - 65536 if dmin < 0 and v >= 32768 else v) * scale + bias
+              if v != 0xffff else float('nan') for v in raw]
     model = FlowPressureModel(baseline, values)
     result = []
     for j in range(samples):
         lo, hi = j * count // samples, (j + 1) * count // samples
         chunk = [values[k] for k in range(lo, hi) if math.isfinite(values[k])]
-        result.append(model.pressure(sum(chunk) / len(chunk)) if chunk else baseline)
+        result.append(sum(model.pressure(value) for value in chunk) / len(chunk)
+                      if chunk else baseline)
     return result
 
 
@@ -1056,6 +1058,9 @@ def make_synthetic_cpap_record(record, fields, channel, pressure, flow_record=No
 
     if flow_record is not None and flow_fields is not None:
         names = [item.decode('ascii').rstrip() for item in fields[0]]
+        for name in SYNTHETIC_CPAP_DETAILED_PRESSURE:
+            record = set_signal_constant(record, fields, name, pressure,
+                                         preserve_missing=True)
         for name in ('Press.40ms', 'MaskPress.2s'):
             if name in names:
                 i = names.index(name)
@@ -1084,7 +1089,8 @@ def empty_signal_header(label, channel):
 
 
 def convert_edf(source, output, labels, mid, vid, summaries=None,
-                synthetic_cpap_pressure=None, flow_source=None, flow_path=None):
+                synthetic_cpap_pressure=None, flow_source=None, flow_path=None,
+                flow_driven_pressure=False):
     """Select signal blocks; optionally reconstruct empty STR rows first."""
     with source.open('rb', buffering=1024 * 1024) as src, \
             output.open('wb', buffering=1024 * 1024) as dst:
@@ -1126,18 +1132,20 @@ def convert_edf(source, output, labels, mid, vid, summaries=None,
             if synthetic_cpap_pressure is not None:
                 flow_record = record if channel in ('BRP', 'PLD') else None
                 flow_fields_for_record = fields if flow_record is not None and 'Flow.40ms' in names else None
-                if channel == 'PLD' and flow_source is not None:
+                if flow_driven_pressure and channel == 'PLD' and flow_source is not None:
                     with flow_source.open('rb') as flow_src:
                         fheader, ffields = read_edf_header(flow_src)
                         fspans, fsize = signal_spans(map(int, ffields[8]))
                         flow_index = records
                         flow_src.seek(int(fheader[184:192]) + flow_index * fsize)
                         candidate = flow_src.read(fsize)
-                        if (candidate and fheader[168:184] == header[168:184]
+                        if (len(candidate) == fsize and fheader[168:184] == header[168:184]
                                 and float(fheader[244:252]) == float(header[244:252])):
                             flow_record, flow_fields_for_record = candidate, ffields
                         else:
                             flow_record, flow_fields_for_record = None, None
+                if not flow_driven_pressure:
+                    flow_record = flow_fields_for_record = None
                 record = make_synthetic_cpap_record(
                     record, fields, channel, synthetic_cpap_pressure,
                     flow_record, flow_fields_for_record)
@@ -1266,7 +1274,8 @@ def convert_directory(source, output, profile_override=None, repair_str=False,
                     path, target, profile.get(channel), mid, vid,
                     summaries if channel == 'STR' else None,
                     synthetic_cpap_pressure,
-                    flow_source=flow_source)
+                    flow_source=flow_source,
+                    flow_driven_pressure=flow_driven_pressure)
                 if sidecar_name is not None:
                     (target_directory / sidecar_name).write_bytes(checksums)
             except ValueError as error:
