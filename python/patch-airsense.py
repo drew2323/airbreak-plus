@@ -1078,6 +1078,19 @@ class ASFirmwarePatches(CompiledPayloadMixin):
         addr = self._write_payload_u16('fall_time', 'fall_time_duration_var_id', vid)
         self._custom_detail('Fall Time: %s var_id=0x%04X at 0x%08X' % (time_var, vid, addr))
 
+    def custom_patch_settings_st_ibr(self):
+        """Expose ST iBR; the native RRT setting supplies both rate modes."""
+        var = self.custom_claim_g8_var('RXW', 'st_ibr_enable')
+        label = self.redefine_fw_string(-1, {0: 'iBR'}, 'st_ibr_label')
+        dep = self.asf.find_var_table_index(4, 'RGT')
+        self.redefine_g8_var(var, 0x0007, 0, dep, label, 0,
+                             2, 0, 0x00000003, self.asf.str_id_off_on_base, 0)
+        self.custom_menu_add('therapy', var, self.mop_bitmask('ST'))
+
+        vid = self.asf.resolve_var_id(var)
+        addr = self._write_payload_u16('st_ibr', 'st_ibr_enable_var_id', vid)
+        self._custom_detail('ST iBR: %s var_id=0x%04X at 0x%08X' % (var, vid, addr))
+
     def custom_patch_settings_graph(self):
         """Expose the graph/stock-gauge switch in clinical Options."""
         graph_var = self.custom_claim_g8_var('RXH', 'graph_enable')
@@ -1211,6 +1224,7 @@ class ASFirmwarePatches(CompiledPayloadMixin):
             ('graph', self.custom_patch_settings_graph),
             ('squarewave', self.custom_patch_settings_squarewave),
             ('fall_time', self.custom_patch_settings_fall_time),
+            ('st_ibr', self.custom_patch_settings_st_ibr),
             ('backlight_adapt', self.custom_patch_settings_backlight),
             ('target_rh', self.custom_patch_settings_target_rh),
             ('header_clock', self.custom_patch_settings_header_clock),
@@ -1920,6 +1934,37 @@ class ASFirmwarePatches(CompiledPayloadMixin):
         self.applied_payloads.add('fall_time')
         return PatchOutcome.ok(None, *details)
 
+    def patch_st_ibr(self):
+        """Wrap the ST worker and initialize its two-byte adaptive timing state."""
+        sites = {
+            'SX567-0401': (0xf8e60, 0xa8706),
+            'SX567-0402': (0xf90d8, 0xa8936),
+        }.get(self.asf.cdx_ver)
+        if sites is None:
+            return PatchOutcome.skip("unsupported CDX version %s" % self.asf.cdx_ver)
+
+        vtable, init_site = sites
+        data, _, elf_path = self._load_versioned_payload('st_ibr')
+        flash, _ = self._inject_payload('st_ibr', data)
+        details = [self._payload_detail('st_ibr', len(data), flash)]
+        for offset, stock, wrapper in (
+                (0x0c, 'breath_progress_worker_reset', 'st_ibr_reset'),
+                (0x10, 'breath_progress_worker_update_mode', 'st_ibr_update_mode'),
+                (0x14, 'breath_progress_worker_disable', 'st_ibr_disable'),
+                (0x18, 'breath_progress_worker_update', 'start')):
+            original = self._elf_symbol_addr(elf_path, stock) | 1
+            target = self._elf_symbol_addr(elf_path, wrapper) | 1
+            self._replace_bytes_checked(
+                vtable + offset, struct.pack('<I', original), struct.pack('<I', target),
+                'ST iBR ' + stock, accept_existing=True)
+            details.append(self._hook_detail(stock, self.asf.FLASH_BASE + vtable + offset, target))
+
+        # strh r0,[r4,#0x24] -> str r0,[r4,#0x24]: also clear padding +0x26/27.
+        self._replace_bytes_checked(init_site, b'\xa0\x84', b'\x60\x62',
+                                    'ST iBR initialization', accept_existing=True)
+        self.applied_payloads.add('st_ibr')
+        return PatchOutcome.ok(None, *details)
+
     def patch_asv_task_wrapper(self):
         """Add runtime-controllable ASV backup-rate suppression."""
         sites = {
@@ -2530,6 +2575,8 @@ PATCH_PHASES = (
                   False, 'patch_squarewave'),
         PatchSpec('patch-fall-time', 'Add adjustable stock S/ST/T/PAC/iVAPS fall time.',
                   False, 'patch_fall_time'),
+        PatchSpec('patch-st-ibr', 'Add adaptive backup-rate control in ST.',
+                  False, 'patch_st_ibr'),
         PatchSpec('patch-fw-asv-wrapper', 'Add ASV backup-rate runtime control.',
                   False, 'patch_asv_task_wrapper'),
         PatchSpec('patch-fw-vauto-wrapper', 'Add custom VAuto pressure shaping.',

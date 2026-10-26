@@ -54,6 +54,25 @@ Without custom settings, the stock fall remains unchanged.
 In S/ST/T/PAC, [Square Wave](squarewave.md) supplies its own pressure
 waveform; turn it Off to use Fall Time.
 
+## ST iBR
+
+This optional patch adds adaptive backup timing in ST. With **iBR Off**, the
+existing **Backup Rate** (`RRT`) sets the fixed backup frequency. With **iBR On**,
+the same setting supplies the target rate for adaptive backup.
+
+After a spontaneous breath, the machine allows up to 1.5 times the target breath
+period before delivering a timed breath. Successive timed breaths shorten this
+period toward the target: approximately 1.5, 1.375, 1.25, 1.125, then 1 times the
+target period. A spontaneous trigger restarts this sequence.
+
+With custom settings, clinical **Therapy** contains:
+
+| Setting | UART | Values | Default |
+|---------|------|--------|---------|
+| iBR | RXW | Off, On | Off |
+
+Without custom settings, ST retains its stock fixed backup rate.
+
 ## Target Humidity
 
 This patch lets users adjust humidification above or below the stock

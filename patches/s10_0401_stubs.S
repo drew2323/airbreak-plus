@@ -10,6 +10,12 @@
 	name = addr
 .text
 
+// Stock ST breath timing and worker lifecycle
+NSTUB(0x080A8239, breath_progress_worker_reset)
+NSTUB(0x080A8265, breath_progress_worker_update_mode)
+NSTUB(0x080A830F, breath_progress_worker_disable)
+NSTUB(0x080A8315, breath_progress_worker_update)
+
 // Stock bilevel and iVAPS pressure waveforms
 NSTUB(0x080A0841, therapy_variable_get)
 NSTUB(0x080B0571, bilevel_pressure_waveform_expiration_ramp)

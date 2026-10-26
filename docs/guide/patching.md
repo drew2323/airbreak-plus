@@ -28,7 +28,7 @@ This builds compiled patches and produces following images:
 | Output | Content |
 |--------|---------|
 | `build/stm32-patched.bin` | unlocked stock-ish |
-| `build/stm32-plus.bin` | graph, Custom VAuto, ASV backup-rate control, Square Wave, Fall Time |
+| `build/stm32-plus.bin` | graph, Custom VAuto, ASV backup-rate control, Square Wave, Fall Time, ST iBR |
 
 The additional features in `plus` have runtime controls in the clinical menu.
 
@@ -104,6 +104,7 @@ environment variables.
 | `PATCH_ASV_TASK_WRAPPER=1` | Add [runtime control](features/asv_backup_rate.md) for stock ASV/ASVAuto backup rate |
 | `PATCH_VAUTO_WRAPPER=1` | Add [Custom VAuto](features/custom_vauto.md) pressure shaping and trigger/cycle assist, including its shared code |
 | `PATCH_FALL_TIME=1` | Add [Fall Time](features/general.md#fall-time) in S/ST/T/PAC/iVAPS through custom settings |
+| `PATCH_ST_IBR=1` | Add [adaptive backup timing in ST](features/general.md#st-ibr) through custom settings |
 
 With custom settings, `Monitoring` in clinical Options enables or disables the
 flow and pressure graph. Without custom settings, the graph remains enabled.
