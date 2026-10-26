@@ -7,6 +7,7 @@ Usage: edf_resscan.py INPUT_DIRECTORY OUTPUT_DIRECTORY
 """
 
 import argparse
+import json
 import binascii
 from bisect import bisect_left, bisect_right
 from collections import Counter, defaultdict
@@ -393,6 +394,20 @@ STR_M40_V50 = (
     "Fault.HeatedTube Crc16 "
 ).split()
 
+# Air11 M46/V3 layouts are explicit ordered projections of the supplied
+# ResScan schema files (STR/PLD VID 03; BRP/SA2 VID 03). Crc16 is the
+# converter's trailing integrity signal, not listed in the schema text.
+STR_M46_V3 = tuple((
+    "Date MaskOn MaskOff MaskEvents Duration Mode S.C.StartPress S.C.Press S.A.StartPress S.A.MaxPress S.A.MinPress S.AFH.StartPress S.AFH.MaxPress S.AFH.MinPress S.AS.Comfort S.RampEnable S.RampTime S.EPR.ClinEnable S.EPR.EPREnable S.EPR.Level S.EPR.EPRType S.SmartStart S.PtAccess S.ABFilter S.Mask S.Tube S.ClimateControl S.HumEnable S.HumLevel S.TempEnable S.Temp HeatedTube Humidifier BlowPress.95 BlowPress.5 Flow.95 Flow.5 BlowFlow.50 AmbHumidity.50 HumTemp.50 HTubeTemp.50 HTubePow.50 HumPow.50 SpO2.50 SpO2.95 SpO2.Max SpO2Thresh MaskPress.50 MaskPress.95 MaskPress.Max TgtIPAP.50 TgtIPAP.95 TgtIPAP.Max TgtEPAP.50 TgtEPAP.95 TgtEPAP.Max Leak.50 Leak.95 Leak.70 Leak.Max MinVent.50 MinVent.95 MinVent.Max RespRate.50 RespRate.95 RespRate.Max TidVol.50 TidVol.95 TidVol.Max AHI HI AI OAI CAI UAI RIN CSR Crc16"
+).split())
+BRP_M46_V3 = tuple("Flow.40ms Press.40ms Crc16".split())
+PLD_M46_V3 = tuple((
+    "MaskPress.2s Press.2s EprPress.2s Leak.2s RespRate.2s TidVol.2s "
+    "MinVent.2s Snore.2s FlowLim.2s Crc16"
+).split())
+SA2_M46_V3 = tuple("Pulse.1s SpO2.1s Crc16".split())
+
+
 # Decimal MID/VID profiles: native MOP options and EDF channel layouts.
 PROFILES = {
     (36, 1): {'modes': {0, 1}, 'STR': STR_M36_V1, 'BRP': BRP_M36_V1, 'PLD': PLD_M36_V1, 'SAD': SAD_M36_V11},
@@ -423,6 +438,9 @@ PROFILES = {
     (40, 49): {'modes': {0, 3, 4, 5, 9, 10}, 'STR': STR_M40_V49, 'BRP': BRP_M36_V11, 'PLD': PLD_M40_V44, 'SAD': SAD_M36_V11},
     (40, 50): {'modes': {0, 7, 8}, 'STR': STR_M40_V50, 'BRP': BRP_M36_V11, 'PLD': PLD_M36_V19, 'SAD': SAD_M36_V11},
     (40, 51): {'modes': {0, 7, 8}, 'STR': STR_M40_V50, 'BRP': BRP_M36_V11, 'PLD': PLD_M36_V19, 'SAD': SAD_M36_V11},
+    # Air11 AutoSet family. Air11 EDF maps raw MOP=0 (CPAP) to exported Mode=3.
+    (46, 3): {'modes': {0, 1, 2}, 'STR': STR_M46_V3,
+              'BRP': BRP_M46_V3, 'PLD': PLD_M46_V3, 'SA2': SA2_M46_V3},
 }
 
 
@@ -467,6 +485,48 @@ def original_profile(identification):
     return tuple(map(int, match.groups()))
 
 
+
+def original_profile_json(data):
+    """Read Air11 MID/VID from Identification.json."""
+    try:
+        root = json.loads(data.decode('utf-8'))
+        software = root['FlowGenerator']['IdentificationProfiles']['Software']
+        return int(software['PlatformIdentifier']), int(software['VariantIdentifier'])
+    except (UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError, ValueError) as error:
+        raise ValueError("Identification.json: missing or invalid Air11 Software identity") from error
+
+
+def restore_air11_json_identification(data, mid, vid):
+    """Rewrite Air11 JSON identity consistently for an M46/V3 CPAP fixture."""
+    try:
+        root = json.loads(data.decode('utf-8'))
+        profiles = root['FlowGenerator']['IdentificationProfiles']
+        product = profiles['Product']
+        software = profiles['Software']
+    except (UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError) as error:
+        raise ValueError("Identification.json: invalid Air11 identity tree") from error
+
+    software['PlatformIdentifier'] = int(mid)
+    software['VariantIdentifier'] = int(vid)
+
+    configuration = software.get('ConfigurationIdentifier')
+    if isinstance(configuration, str):
+        parts = configuration.split('.')
+        if len(parts) >= 4 and parts[0].startswith('CF'):
+            parts[2] = f'{vid:02d}'
+            software['ConfigurationIdentifier'] = '.'.join(parts)
+
+    pvi = software.get('ProfileVariationIdentifier')
+    if isinstance(pvi, str):
+        software['ProfileVariationIdentifier'] = re.sub(
+            r'\d{3}$', f'{vid:03d}', pvi)
+
+    if mid == 46 and vid == 3:
+        product['ProductName'] = 'AirSense 11 AutoSet'
+
+    return json.dumps(root, separators=(',', ':'), ensure_ascii=False).encode('utf-8')
+
+
 def parse_profile(value):
     match = re.fullmatch(r'(\d+):(\d+)', value)
     if match is None:
@@ -480,6 +540,40 @@ def restore_identification(data, mid, vid):
         data, count = re.subn(rb'^#' + tag + rb'\b[^\r\n]*', replacement, data, flags=re.M)
         if count == 0:
             data = data.rstrip(b'\r\n') + b'\r\n' + replacement + b'\r\n'
+    return data
+
+
+def restore_air11_identification(data, mid, vid):
+    """Rewrite Air11 identity strings consistently to the requested MID/VID."""
+    data = restore_identification(data, mid, vid)
+
+    # FGT: ..._M46_V12 -> ..._M46_V3
+    pattern = rb'(^#FGT\s+\S*_M)\d+(_V)\d+([^\r\n]*)'
+    data = re.sub(
+        pattern,
+        lambda m: (m.group(1) + str(mid).encode('ascii') +
+                   m.group(2) + str(vid).encode('ascii') + m.group(3)),
+        data, count=1, flags=re.M)
+
+    # GCD/CID: VID is the two-digit component after the second dot.
+    def dotted(match):
+        value = match.group(2)
+        parts = value.split(b'.')
+        if len(parts) >= 4:
+            parts[2] = ('%02d' % vid).encode('ascii')
+            value = b'.'.join(parts)
+        return match.group(1) + value
+
+    data = re.sub(rb'^(#(?:GCD|CID)\s+)(\S+)', dotted, data, flags=re.M)
+
+    # PVI: last three characters encode VID, zero padded.
+    def pvi(match):
+        value = match.group(2)
+        if len(value) >= 3:
+            value = value[:-3] + ('%03d' % vid).encode('ascii')
+        return match.group(1) + value
+
+    data = re.sub(rb'^(#PVI\s+)(\S+)', pvi, data, flags=re.M)
     return data
 
 
@@ -808,6 +902,184 @@ def repair_str_record(record, fields, summaries):
     return bytes(result)
 
 
+SYNTHETIC_CPAP_DETAILED_PRESSURE = (
+    'Press.40ms',
+    'MaskPress.2s',
+    'Press.2s',
+    'EprPress.2s',
+)
+
+SYNTHETIC_CPAP_STR_PRESSURE = (
+    'S.C.StartPress',
+    'S.C.Press',
+    'BlowPress.95',
+    'BlowPress.5',
+    'MaskPress.50',
+    'MaskPress.95',
+    'MaskPress.Max',
+    'TgtIPAP.50',
+    'TgtIPAP.95',
+    'TgtIPAP.Max',
+    'TgtEPAP.50',
+    'TgtEPAP.95',
+    'TgtEPAP.Max',
+)
+
+
+FLOW_PRESSURE_LOW = 6.4
+FLOW_PRESSURE_HIGH = 7.9
+# Frozen from a noon-to-noon per-night sweep of the development snapshot:
+# >=1.4 L/s onset, saturating at 2.0 L/s. Event grouping allows at most two
+# intervening 40 ms samples (120 ms); counts vary by night and input snapshot.
+FLOW_RARE_PEAK_ONSET_LPS = 1.4
+FLOW_RARE_PEAK_SATURATION_LPS = 2.0
+FLOW_RARE_PEAK_MAX_AT_7_5 = 9.5
+
+
+class FlowPressureModel:
+    """Deterministic signed-flow heuristic; not a physiology model."""
+    def __init__(self, baseline, flow_samples):
+        self.baseline = float(baseline)
+        valid = sorted(abs(float(x)) for x in flow_samples
+                       if math.isfinite(float(x)))
+        self.reference = valid[max(0, math.ceil(.95 * len(valid)) - 1)] if valid else 0.0
+
+    def pressure(self, flow):
+        if not math.isfinite(float(flow)) or self.reference <= 0:
+            return self.baseline
+        magnitude = abs(float(flow))
+        if magnitude >= FLOW_RARE_PEAK_ONSET_LPS:
+            fraction = min(1.0, (magnitude - FLOW_RARE_PEAK_ONSET_LPS) /
+                           (FLOW_RARE_PEAK_SATURATION_LPS - FLOW_RARE_PEAK_ONSET_LPS))
+            peak = self.baseline * FLOW_RARE_PEAK_MAX_AT_7_5 / 7.5
+            return self.baseline + fraction * (peak - self.baseline)
+        fraction = max(-1.0, min(1.0, float(flow) / self.reference))
+        low = self.baseline * FLOW_PRESSURE_LOW / 7.5
+        high = self.baseline * FLOW_PRESSURE_HIGH / 7.5
+        if fraction < 0:
+            return self.baseline + (-fraction) * (high - self.baseline)
+        return self.baseline - fraction * (self.baseline - low)
+
+
+def flow_driven_mask_pressure(baseline, flow):
+    return FlowPressureModel(baseline, [flow]).pressure(flow)
+
+
+def set_signal_values(record, fields, name, values, preserve_missing=True):
+    names = [item.decode('ascii').rstrip() for item in fields[0]]
+    if name not in names:
+        return record
+    i = names.index(name)
+    if len(values) != int(fields[8][i]):
+        raise ValueError("%s expected %d values, got %d" % (name, int(fields[8][i]), len(values)))
+    spans, _ = signal_spans(map(int, fields[8]))
+    scale, bias, dmin, dmax = signal_scale(fields, i)
+    result = bytearray(record)
+    for j, value in enumerate(values):
+        off = spans[i].start + 2 * j
+        old = struct.unpack_from('<H', result, off)[0]
+        if preserve_missing and old == 0xffff:
+            continue
+        raw = round((value - bias) / scale)
+        raw = max(int(dmin), min(int(dmax), raw))
+        struct.pack_into('<H', result, off, raw & 0xffff)
+    return bytes(result)
+
+
+def same_edf_session(brp_name, pld_name):
+    a = re.match(r'^(\d{8}_\d{6})_BRP\.edf$', Path(brp_name).name, re.I)
+    b = re.match(r'^(\d{8}_\d{6})_PLD\.edf$', Path(pld_name).name, re.I)
+    return bool(a and b and a.group(1) == b.group(1))
+
+
+def flow_pressure_for_record(flow_record, flow_fields, baseline, samples):
+    names = [x.decode('ascii').rstrip() for x in flow_fields[0]]
+    if 'Flow.40ms' not in names:
+        return [baseline] * samples
+    index = names.index('Flow.40ms')
+    spans, _ = signal_spans(map(int, flow_fields[8]))
+    scale, bias, dmin, _ = signal_scale(flow_fields, index)
+    count = int(flow_fields[8][index])
+    raw = struct.unpack_from('<%dH' % count, flow_record, spans[index].start)
+    values = [(v - 65536 if dmin < 0 and v >= 32768 else v) * scale + bias
+              if v != 0xffff else float('nan') for v in raw]
+    model = FlowPressureModel(baseline, values)
+    result = []
+    for j in range(samples):
+        lo, hi = j * count // samples, (j + 1) * count // samples
+        chunk = [values[k] for k in range(lo, hi) if math.isfinite(values[k])]
+        result.append(sum(model.pressure(value) for value in chunk) / len(chunk)
+                      if chunk else baseline)
+    return result
+
+
+def set_signal_constant(record, fields, name, value, preserve_missing=True):
+    """Set every sample of one EDF signal to a physical value."""
+    names = [item.decode('ascii').rstrip() for item in fields[0]]
+    if name not in names:
+        return record
+
+    i = names.index(name)
+    samples = int(fields[8][i])
+    spans, _ = signal_spans(map(int, fields[8]))
+    scale, bias, dmin, dmax = signal_scale(fields, i)
+    raw = round((value - bias) / scale)
+    if not (dmin <= raw <= dmax) or (raw & 0xffff) == 0xffff:
+        raise ValueError("%s=%s is outside EDF signal range" % (name, value))
+
+    result = bytearray(record)
+    for sample in range(samples):
+        offset = spans[i].start + 2 * sample
+        old = struct.unpack_from('<H', result, offset)[0]
+        if preserve_missing and old == 0xffff:
+            continue
+        struct.pack_into('<H', result, offset, raw & 0xffff)
+    return bytes(result)
+
+
+def str_record_has_therapy(record, fields):
+    names = [item.decode('ascii').rstrip() for item in fields[0]]
+    spans, _ = signal_spans(map(int, fields[8]))
+    for name in ('Duration', 'Mode'):
+        if name in names:
+            raw = struct.unpack_from('<H', record, spans[names.index(name)].start)[0]
+            if raw != 0xffff:
+                return True
+    return False
+
+
+def make_synthetic_cpap_record(record, fields, channel, pressure, flow_record=None, flow_fields=None):
+    """Set synthetic detail pressure; therapy pressure settings remain fixed."""
+    if channel == 'STR':
+        if not str_record_has_therapy(record, fields):
+            return record
+
+        # Air11 STR export map: raw MOP CPAP=0 -> EDF Mode value 3.
+        record = set_signal_constant(record, fields, 'Mode', 3, preserve_missing=False)
+        for name in SYNTHETIC_CPAP_STR_PRESSURE:
+            record = set_signal_constant(
+                record, fields, name, pressure, preserve_missing=False)
+        return record
+
+    if flow_record is not None and flow_fields is not None:
+        names = [item.decode('ascii').rstrip() for item in fields[0]]
+        for name in SYNTHETIC_CPAP_DETAILED_PRESSURE:
+            record = set_signal_constant(record, fields, name, pressure,
+                                         preserve_missing=True)
+        for name in ('Press.40ms', 'MaskPress.2s'):
+            if name in names:
+                i = names.index(name)
+                values = flow_pressure_for_record(flow_record, flow_fields, pressure,
+                                                  int(fields[8][i]))
+                record = set_signal_values(record, fields, name, values,
+                                           preserve_missing=True)
+    else:
+        for name in SYNTHETIC_CPAP_DETAILED_PRESSURE:
+            record = set_signal_constant(record, fields, name, pressure,
+                                         preserve_missing=True)
+    return record
+
+
 def empty_signal_header(label, channel):
     """Describe an absent channel whose samples will all be FFFF."""
     samples = 1
@@ -821,7 +1093,9 @@ def empty_signal_header(label, channel):
                  for value, width in zip(values, SIGNAL_FIELD_WIDTHS))
 
 
-def convert_edf(source, output, labels, mid, vid, summaries=None):
+def convert_edf(source, output, labels, mid, vid, summaries=None,
+                synthetic_cpap_pressure=None, flow_source=None, flow_path=None,
+                flow_driven_pressure=False):
     """Select signal blocks; optionally reconstruct empty STR rows first."""
     with source.open('rb', buffering=1024 * 1024) as src, \
             output.open('wb', buffering=1024 * 1024) as dst:
@@ -829,6 +1103,8 @@ def convert_edf(source, output, labels, mid, vid, summaries=None):
         count = int(header[252:256])
         names = [value.decode('ascii').rstrip() for value in fields[0]]
         samples = [int(value) for value in fields[8]]
+        if callable(labels):
+            labels = labels(names)
         if labels is None:
             labels = [name for name in names if name != 'Crc16'] + ['Crc16']
         indices = {name: i for i, name in enumerate(names)}
@@ -854,9 +1130,30 @@ def convert_edf(source, output, labels, mid, vid, summaries=None):
         # EDF sidecar CRC32 entries cover the fixed header and the remainder.
         remainder_crc = zlib.crc32(new_signal_header)
         records = 0
+        channel = edf_channel(source)
         while record := src.read(record_size):
             if summaries is not None:
                 record = repair_str_record(record, fields, summaries)
+            if synthetic_cpap_pressure is not None:
+                flow_record = record if channel in ('BRP', 'PLD') else None
+                flow_fields_for_record = fields if flow_record is not None and 'Flow.40ms' in names else None
+                if flow_driven_pressure and channel == 'PLD' and flow_source is not None:
+                    with flow_source.open('rb') as flow_src:
+                        fheader, ffields = read_edf_header(flow_src)
+                        fspans, fsize = signal_spans(map(int, ffields[8]))
+                        flow_index = records
+                        flow_src.seek(int(fheader[184:192]) + flow_index * fsize)
+                        candidate = flow_src.read(fsize)
+                        if (len(candidate) == fsize and fheader[168:184] == header[168:184]
+                                and float(fheader[244:252]) == float(header[244:252])):
+                            flow_record, flow_fields_for_record = candidate, ffields
+                        else:
+                            flow_record, flow_fields_for_record = None, None
+                if not flow_driven_pressure:
+                    flow_record = flow_fields_for_record = None
+                record = make_synthetic_cpap_record(
+                    record, fields, channel, synthetic_cpap_pressure,
+                    flow_record, flow_fields_for_record)
             converted = b''.join((record[span] if span is not None else b'').ljust(size, b'\xff')
                                  for span, size in selected)
             converted += struct.pack('<H', crc16(converted))
@@ -878,7 +1175,8 @@ def edf_channel(path):
 
 
 def convert_directory(source, output, profile_override=None, repair_str=False,
-                      overwrite=False, from_date=None):
+                      overwrite=False, from_date=None,
+                      synthetic_cpap_pressure=None, flow_driven_pressure=False):
     source = source.resolve()
     output = output.resolve()
     if not source.is_dir():
@@ -887,16 +1185,35 @@ def convert_directory(source, output, profile_override=None, repair_str=False,
         raise ValueError("Output must be outside the input directory")
     if output.exists() and not overwrite and any(output.iterdir()):
         raise ValueError("Output is not empty; use --overwrite: " + str(output))
-    identification = find_file(source, 'Identification.tgt')
-    if identification is None:
-        raise ValueError("Input directory must contain Identification.tgt")
-    identity = identification.read_bytes()
-    mid, vid = original_profile(identity) if profile_override is None else profile_override
+    identification_json = find_file(source, 'Identification.json')
+    identification_tgt = find_file(source, 'Identification.tgt')
+    identification = identification_json or identification_tgt
+    if identification is None and profile_override is None:
+        raise ValueError("Input directory must contain Identification.json or Identification.tgt")
+    identity = identification.read_bytes() if identification is not None else b''
+    identification_is_json = identification_json is not None and identification == identification_json
+    # An explicit override is authoritative and must not depend on parsing the
+    # source's possibly absent/unknown device identity. JSON is still parsed
+    # structurally if rewritten; opaque TGT is not interpreted in this path.
+    source_profile = (profile_override if profile_override is not None else
+                      (original_profile_json(identity) if identification_is_json
+                       else original_profile(identity)))
+    if flow_driven_pressure and synthetic_cpap_pressure is None:
+        raise ValueError('--flow-driven-pressure requires --synthetic-cpap-pressure')
+    if synthetic_cpap_pressure is not None:
+        if source_profile[0] != 46:
+            raise ValueError('--synthetic-cpap-pressure currently supports Air11/M46 only')
+        if profile_override not in (None, (46, 3)):
+            raise ValueError('--synthetic-cpap-pressure requires output profile 46:3')
+        profile_override = (46, 3)
+    mid, vid = source_profile if profile_override is None else profile_override
     if (mid, vid) not in PROFILES:
         raise ValueError("No embedded profile for M%d/V%d; use --profile MID:VID to select another profile"
                          % (mid, vid))
     profile = PROFILES[mid, vid]
     summaries = None
+    if repair_str and synthetic_cpap_pressure is not None:
+        raise ValueError('--repair-str cannot be combined with --synthetic-cpap-pressure')
     if repair_str:
         try:
             factory_profile = original_profile(identity)
@@ -904,7 +1221,13 @@ def convert_directory(source, output, profile_override=None, repair_str=False,
             factory_profile = None
         print("Reconstructing empty STR days from original recordings (estimated values)...")
         summaries = reconstruct_str(source, factory_profile)
-    identity = restore_identification(identity, mid, vid)
+    if identification_is_json:
+        if synthetic_cpap_pressure is not None or profile_override is not None:
+            identity = restore_air11_json_identification(identity, mid, vid)
+    elif identification is not None and (synthetic_cpap_pressure is not None or profile_override is not None):
+        identity = restore_air11_identification(identity, mid, vid)
+    elif identification is not None:
+        identity = restore_identification(identity, mid, vid)
     print("Profile: M%d/V%d (%s)" % (mid, vid, 'FGT' if profile_override is None else '--profile'))
 
     output.mkdir(parents=True, exist_ok=True)
@@ -927,10 +1250,14 @@ def convert_directory(source, output, profile_override=None, repair_str=False,
                 session = re.match(r'^(\d{8})_\d{6}_', name)
                 if session and datetime.strptime(session[1], '%Y%m%d').date() < from_date:
                     continue
-            if path == identification:
+            if identification is not None and path == identification:
                 target.write_bytes(identity)
                 continue
-            if directory == source and name.lower() == identification.with_suffix('.crc').name.lower():
+            # Only one identity representation is authoritative in output.
+            if name.lower() in ('identification.json', 'identification.tgt'):
+                continue
+            if (identification is not None and directory == source and
+                    name.lower() == identification.with_suffix('.crc').name.lower()):
                 target.write_bytes(struct.pack('<I', zlib.crc32(identity)))
                 continue
             if path.suffix.lower() != '.edf':
@@ -939,7 +1266,7 @@ def convert_directory(source, output, profile_override=None, repair_str=False,
             relative = path.relative_to(source)
             sidecar_name = names.get(path.with_suffix('.crc').name.lower())
             channel = edf_channel(path)
-            if channel in ('STR', 'BRP', 'PLD', 'SAD') and channel not in profile:
+            if channel in ('STR', 'BRP', 'PLD', 'SAD', 'SA2', 'TCV') and channel not in profile:
                 for old_name in (name, path.with_suffix('.crc').name):
                     old = find_file(target_directory, old_name)
                     if old is not None:
@@ -947,9 +1274,21 @@ def convert_directory(source, output, profile_override=None, repair_str=False,
                 print("  %s: omitted (not recorded by this profile)" % relative)
                 continue
             try:
+                flow_source = None
+                if (flow_driven_pressure and channel == 'PLD'):
+                    session_prefix = re.match(r'^(\d{8}_\d{6})_PLD$', path.stem, re.I)
+                    if session_prefix:
+                        candidate = path.with_name(session_prefix.group(1) + '_BRP.edf')
+                        if candidate.is_file():
+                            flow_source = candidate
+                if (flow_driven_pressure and channel == 'BRP'):
+                    flow_source = None
                 old, new, records, checksums = convert_edf(
                     path, target, profile.get(channel), mid, vid,
-                    summaries if channel == 'STR' else None)
+                    summaries if channel == 'STR' else None,
+                    synthetic_cpap_pressure,
+                    flow_source=flow_source,
+                    flow_driven_pressure=flow_driven_pressure)
                 if sidecar_name is not None:
                     (target_directory / sidecar_name).write_bytes(checksums)
             except ValueError as error:
@@ -970,10 +1309,16 @@ def main():
                         help='convert sessions on or after this date; always update STR and identification')
     parser.add_argument('--repair-str', action='store_true',
                         help='estimate empty STR days from original PLD/SAD/EVE recordings')
+    parser.add_argument('--synthetic-cpap-pressure', type=float, metavar='CMH2O',
+                        help='research fixture: export Air11 data as fixed-pressure CPAP')
+    parser.add_argument('--flow-driven-pressure', action='store_true',
+                        help='vary displayed mask pressure from matched Flow.40ms; heuristic only')
     args = parser.parse_args()
     try:
         convert_directory(args.source_dir, args.output_dir, args.profile, args.repair_str,
-                          overwrite=args.overwrite, from_date=args.from_date)
+                          overwrite=args.overwrite, from_date=args.from_date,
+                          synthetic_cpap_pressure=args.synthetic_cpap_pressure,
+                          flow_driven_pressure=args.flow_driven_pressure)
     except (OSError, ValueError) as error:
         parser.exit(1, "Error: %s\n" % error)
 
