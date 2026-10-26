@@ -394,25 +394,18 @@ STR_M40_V50 = (
     "Fault.HeatedTube Crc16 "
 ).split()
 
-# Air11 M46/V3 is the AutoSet-family profile used for CPAP/AutoSet/For Her.
-# The Airbreak EDF superset preserves stock ordering and adds rows, so a
-# V3-compatible layout can be recovered by removing rows that provenance marks
-# as VA/ST/ASV-only.
-AS11_V3_STR_EXCLUDE_PREFIXES = (
-    "S.VA.", "S.S.", "S.ST.", "S.T.", "S.AV.", "S.AA.",
-    "SpontTrig%", "SpontCyc%", "TgtVent.", "IERatio.", "Ti.",
-)
-AS11_V3_PLD_EXCLUDE_PREFIXES = ("TgtVent.", "IERatio.", "Ti.")
-
-
-def str_m46_v3(names):
-    return tuple(name for name in names
-                 if not name.startswith(AS11_V3_STR_EXCLUDE_PREFIXES))
-
-
-def pld_m46_v3(names):
-    return tuple(name for name in names
-                 if not name.startswith(AS11_V3_PLD_EXCLUDE_PREFIXES))
+# Air11 M46/V3 layouts are explicit ordered projections of the supplied
+# ResScan schema files (STR/PLD VID 03; BRP/SA2 VID 03). Crc16 is the
+# converter's trailing integrity signal, not listed in the schema text.
+STR_M46_V3 = tuple((
+    "Date MaskOn MaskOff MaskEvents Duration Mode S.C.StartPress S.C.Press S.A.StartPress S.A.MaxPress S.A.MinPress S.AFH.StartPress S.AFH.MaxPress S.AFH.MinPress S.AS.Comfort S.RampEnable S.RampTime S.EPR.ClinEnable S.EPR.EPREnable S.EPR.Level S.EPR.EPRType S.SmartStart S.PtAccess S.ABFilter S.Mask S.Tube S.ClimateControl S.HumEnable S.HumLevel S.TempEnable S.Temp HeatedTube Humidifier BlowPress.95 BlowPress.5 Flow.95 Flow.5 BlowFlow.50 AmbHumidity.50 HumTemp.50 HTubeTemp.50 HTubePow.50 HumPow.50 SpO2.50 SpO2.95 SpO2.Max SpO2Thresh MaskPress.50 MaskPress.95 MaskPress.Max TgtIPAP.50 TgtIPAP.95 TgtIPAP.Max TgtEPAP.50 TgtEPAP.95 TgtEPAP.Max Leak.50 Leak.95 Leak.70 Leak.Max MinVent.50 MinVent.95 MinVent.Max RespRate.50 RespRate.95 RespRate.Max TidVol.50 TidVol.95 TidVol.Max AHI HI AI OAI CAI UAI RIN CSR Crc16"
+).split())
+BRP_M46_V3 = tuple("Flow.40ms Press.40ms Crc16".split())
+PLD_M46_V3 = tuple((
+    "MaskPress.2s Press.2s EprPress.2s Leak.2s RespRate.2s TidVol.2s "
+    "MinVent.2s Snore.2s FlowLim.2s Crc16"
+).split())
+SA2_M46_V3 = tuple("Pulse.1s SpO2.1s Crc16".split())
 
 
 # Decimal MID/VID profiles: native MOP options and EDF channel layouts.
@@ -446,8 +439,8 @@ PROFILES = {
     (40, 50): {'modes': {0, 7, 8}, 'STR': STR_M40_V50, 'BRP': BRP_M36_V11, 'PLD': PLD_M36_V19, 'SAD': SAD_M36_V11},
     (40, 51): {'modes': {0, 7, 8}, 'STR': STR_M40_V50, 'BRP': BRP_M36_V11, 'PLD': PLD_M36_V19, 'SAD': SAD_M36_V11},
     # Air11 AutoSet family. Air11 EDF maps raw MOP=0 (CPAP) to exported Mode=3.
-    (46, 3): {'modes': {0, 1, 2}, 'STR': str_m46_v3,
-              'BRP': None, 'PLD': pld_m46_v3, 'SA2': None},
+    (46, 3): {'modes': {0, 1, 2}, 'STR': STR_M46_V3,
+              'BRP': BRP_M46_V3, 'PLD': PLD_M46_V3, 'SA2': SA2_M46_V3},
 }
 
 
@@ -1195,12 +1188,16 @@ def convert_directory(source, output, profile_override=None, repair_str=False,
     identification_json = find_file(source, 'Identification.json')
     identification_tgt = find_file(source, 'Identification.tgt')
     identification = identification_json or identification_tgt
-    if identification is None:
+    if identification is None and profile_override is None:
         raise ValueError("Input directory must contain Identification.json or Identification.tgt")
-    identity = identification.read_bytes()
+    identity = identification.read_bytes() if identification is not None else b''
     identification_is_json = identification_json is not None and identification == identification_json
-    source_profile = (original_profile_json(identity) if identification_is_json
-                      else original_profile(identity))
+    # An explicit override is authoritative and must not depend on parsing the
+    # source's possibly absent/unknown device identity. JSON is still parsed
+    # structurally if rewritten; opaque TGT is not interpreted in this path.
+    source_profile = (profile_override if profile_override is not None else
+                      (original_profile_json(identity) if identification_is_json
+                       else original_profile(identity)))
     if flow_driven_pressure and synthetic_cpap_pressure is None:
         raise ValueError('--flow-driven-pressure requires --synthetic-cpap-pressure')
     if synthetic_cpap_pressure is not None:
@@ -1225,11 +1222,11 @@ def convert_directory(source, output, profile_override=None, repair_str=False,
         print("Reconstructing empty STR days from original recordings (estimated values)...")
         summaries = reconstruct_str(source, factory_profile)
     if identification_is_json:
-        if synthetic_cpap_pressure is not None:
+        if synthetic_cpap_pressure is not None or profile_override is not None:
             identity = restore_air11_json_identification(identity, mid, vid)
-    elif synthetic_cpap_pressure is not None:
+    elif identification is not None and (synthetic_cpap_pressure is not None or profile_override is not None):
         identity = restore_air11_identification(identity, mid, vid)
-    else:
+    elif identification is not None:
         identity = restore_identification(identity, mid, vid)
     print("Profile: M%d/V%d (%s)" % (mid, vid, 'FGT' if profile_override is None else '--profile'))
 
@@ -1253,10 +1250,14 @@ def convert_directory(source, output, profile_override=None, repair_str=False,
                 session = re.match(r'^(\d{8})_\d{6}_', name)
                 if session and datetime.strptime(session[1], '%Y%m%d').date() < from_date:
                     continue
-            if path == identification:
+            if identification is not None and path == identification:
                 target.write_bytes(identity)
                 continue
-            if directory == source and name.lower() == identification.with_suffix('.crc').name.lower():
+            # Only one identity representation is authoritative in output.
+            if name.lower() in ('identification.json', 'identification.tgt'):
+                continue
+            if (identification is not None and directory == source and
+                    name.lower() == identification.with_suffix('.crc').name.lower()):
                 target.write_bytes(struct.pack('<I', zlib.crc32(identity)))
                 continue
             if path.suffix.lower() != '.edf':
