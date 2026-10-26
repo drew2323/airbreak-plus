@@ -935,11 +935,11 @@ SYNTHETIC_CPAP_STR_PRESSURE = (
 
 FLOW_PRESSURE_LOW = 6.4
 FLOW_PRESSURE_HIGH = 7.9
-# Frozen from the current fixture's |Flow.40ms| distribution: >=1.8 L/s
-# onset, linearly saturating at 2.4 L/s. Events are contiguous threshold hits,
-# allowing at most two intervening 40 ms samples (120 ms grouping window).
-FLOW_RARE_PEAK_ONSET_LPS = 1.8
-FLOW_RARE_PEAK_SATURATION_LPS = 2.4
+# Frozen from a noon-to-noon per-night sweep of the development snapshot:
+# >=1.4 L/s onset, saturating at 2.0 L/s. Event grouping allows at most two
+# intervening 40 ms samples (120 ms); counts vary by night and input snapshot.
+FLOW_RARE_PEAK_ONSET_LPS = 1.4
+FLOW_RARE_PEAK_SATURATION_LPS = 2.0
 FLOW_RARE_PEAK_MAX_AT_7_5 = 9.5
 
 

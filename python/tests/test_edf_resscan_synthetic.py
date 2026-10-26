@@ -75,9 +75,9 @@ class SyntheticPressureTests(unittest.TestCase):
 
     def test_rare_flow_peak_is_continuous_bounded_and_sign_symmetric(self):
         model = edf.FlowPressureModel(7.5, [-2.0, 2.0])
-        self.assertAlmostEqual(model.pressure(1.8), 7.5)
-        self.assertGreater(model.pressure(1.81), 7.5)
-        self.assertAlmostEqual(model.pressure(2.4), 9.5)
+        self.assertAlmostEqual(model.pressure(edf.FLOW_RARE_PEAK_ONSET_LPS), 7.5)
+        self.assertGreater(model.pressure(edf.FLOW_RARE_PEAK_ONSET_LPS + 0.01), 7.5)
+        self.assertAlmostEqual(model.pressure(edf.FLOW_RARE_PEAK_SATURATION_LPS), 9.5)
         self.assertEqual(model.pressure(100), 9.5)
         self.assertEqual(model.pressure(-100), 9.5)
         self.assertEqual(model.pressure(float("nan")), 7.5)
